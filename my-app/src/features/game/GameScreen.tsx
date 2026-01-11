@@ -25,7 +25,6 @@ interface GameScreenProps {
 
 /**
  * ゲームのメイン画面コンポーネント
- * Canvasの管理、ゲームループの実行、UI状態の同期を行います
  */
 export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -33,7 +32,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
   // 入力フック
   const { keys, mouse, handlers } = useGameInput();
 
-  // React State for UI (頻繁なレンダリングを避けるため、ゲームループとは分離)
+  // React State for UI
   const [uiState, setUiState] = useState({
     hp: 100,
     maxHp: 100,
@@ -42,9 +41,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
     mode: 'combat' as 'combat' | 'build'
   });
 
-  // Mutable Game State (Refで管理し、Reactの再レンダリングを回避)
+  // Mutable Game State
   const gameState = useRef<GameState>({
-    map: [], // 初期化時に生成
+    map: [],
     player: createPlayer(),
     enemies: [],
     particles: [],
@@ -54,14 +53,24 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
 
   // 初期化 (マウント時のみ)
   useEffect(() => {
-    // マップ生成
+    // マップ生成（安全地帯確保版）
     gameState.current.map = generateMap();
     
     // 初期敵スポーン
     for (let i = 0; i < 10; i++) {
-      const x = Math.random() * (GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE);
-      const y = Math.random() * (GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE);
+      // プレイヤー付近(5,5)を避けてスポーン
+      let x, y;
+      do {
+        x = Math.random() * (GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE);
+        y = Math.random() * (GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE);
+      } while (x < 400 && y < 400); // 左上エリアを避ける簡易判定
+
       gameState.current.enemies.push(createEnemy(x, y));
+    }
+    
+    // ゲーム開始時にCanvasにフォーカスを当てる
+    if (canvasRef.current) {
+      canvasRef.current.focus();
     }
   }, []);
 
@@ -81,12 +90,10 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
       // 2. 描画
       renderGame(ctx, gameState.current, { mouse: mouse.current });
 
-      // 3. UIとの同期 (頻度を落とす簡単なスロットリング)
-      // 本番環境では requestIdleCallback やもっと洗練された方法を検討
+      // 3. UI同期
       if (Math.random() > 0.9) {
         const p = gameState.current.player;
         setUiState(prev => {
-          // 値が変わっていない場合は更新しない最適化を入れると良い
           if (prev.hp === p.hp && 
               prev.inventoryCount === p.inventory.length && 
               prev.enemyCount === gameState.current.enemies.length &&
@@ -114,15 +121,12 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
     };
   }, []);
 
-  // モード切替アクション
   const handleToggleMode = () => {
     const nextMode = gameState.current.mode === 'combat' ? 'build' : 'combat';
     gameState.current.mode = nextMode;
-    // 即時UI反映
     setUiState(prev => ({ ...prev, mode: nextMode }));
   };
 
-  // セーブアクション
   const handleSave = async () => {
     if (!user) return;
     try {
@@ -130,7 +134,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
         player: gameState.current.player,
         lastSaved: new Date()
       });
-      // 本来はToast通知などを出す
       alert('Game Saved Successfully!');
     } catch (e) {
       console.error("Save failed:", e);
@@ -140,7 +143,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
 
   return (
     <div className="relative w-full h-full flex items-center justify-center bg-black">
-      {/* HUD (UIレイヤー) */}
       <HUD 
         hp={uiState.hp}
         maxHp={uiState.maxHp}
@@ -151,9 +153,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
         onSave={handleSave}
       />
 
-      {/* ゲームキャンバス */}
       <div 
-        className="relative shadow-2xl overflow-hidden rounded-lg border-4 transition-colors duration-300"
+        className="relative shadow-2xl overflow-hidden rounded-lg border-4 transition-colors duration-300 outline-none"
         style={{ 
           borderColor: THEME.colors.uiBorder,
           width: GAME_CONFIG.VIEWPORT_WIDTH,
@@ -164,8 +165,14 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
           ref={canvasRef}
           width={GAME_CONFIG.VIEWPORT_WIDTH}
           height={GAME_CONFIG.VIEWPORT_HEIGHT}
-          className="block bg-black cursor-crosshair"
+          className="block bg-black cursor-crosshair outline-none"
+          tabIndex={0} // キーボードイベントを受け取るために必要
           {...handlers}
+          // クリック時にもフォーカスを強制
+          onClick={(e) => {
+            handlers.onMouseDown(e);
+            e.currentTarget.focus();
+          }}
         />
       </div>
     </div>
