@@ -1,6 +1,8 @@
 // ゲーム全体で使用される型定義
 
-export type TileType = 'grass' | 'dirt' | 'wall' | 'water' | 'crop';
+export type TileType = 
+  | 'grass' | 'dirt' | 'wall' | 'water' | 'crop' 
+  | 'mountain' | 'dungeon_entrance' | 'stairs_down' | 'portal_out';
 
 export interface Tile {
   x: number;
@@ -8,6 +10,7 @@ export interface Tile {
   type: TileType;
   solid: boolean;
   cropGrowth?: number;
+  meta?: any; // ダンジョンの深さなどを保持
 }
 
 // アイテム・装備関連
@@ -20,17 +23,18 @@ export interface Item {
   type: ItemType;
   rarity: Rarity;
   level: number;
-  value: number; // 売却価格や効果量
-  icon?: string; // 絵文字やアイコンID
+  value: number;
+  icon?: string;
   stats?: {
     attack?: number;
     defense?: number;
     hp?: number;
   };
+  isBossDrop?: boolean;
 }
 
 export interface InventoryItem extends Item {
-  instanceId: string; // 個別識別用
+  instanceId: string;
 }
 
 // ワールドオブジェクト
@@ -47,11 +51,11 @@ export interface DroppedItem {
   item: Item;
   x: number;
   y: number;
-  life: number; // 消滅までの時間
+  life: number;
 }
 
 // エンティティ
-export type EntityType = 'player' | 'enemy' | 'item';
+export type EntityType = 'player' | 'enemy' | 'item' | 'boss';
 
 export interface Entity {
   id: string;
@@ -82,9 +86,10 @@ export interface PlayerEntity extends CombatEntity {
 }
 
 export interface EnemyEntity extends CombatEntity {
-  type: 'enemy';
+  type: 'enemy' | 'boss';
   targetId?: string | null;
-  dropRate: number; // 0.0 - 1.0
+  dropRate: number;
+  isBoss?: boolean;
 }
 
 export interface Particle {
@@ -101,9 +106,18 @@ export interface Particle {
 export type Difficulty = 'easy' | 'normal' | 'hard' | 'expert';
 
 export interface GameSettings {
-  masterVolume: number; // 0.0 - 1.0
-  gameSpeed: number;    // 1.0, 1.5, 2.0
+  masterVolume: number;
+  gameSpeed: number;
   difficulty: Difficulty;
+}
+
+// マップロケーション情報
+export interface LocationInfo {
+  type: 'world' | 'dungeon';
+  level: number;       // ワールドなら0、ダンジョンなら階層
+  maxDepth?: number;   // ダンジョンの最大階層
+  dungeonId?: string;  // 入ったダンジョンのID
+  difficultyMult?: number; // ダンジョンごとの難易度倍率
 }
 
 export interface GameState {
@@ -111,9 +125,10 @@ export interface GameState {
   player: PlayerEntity;
   enemies: EnemyEntity[];
   particles: Particle[];
-  chests: Chest[];        // 追加
-  droppedItems: DroppedItem[]; // 追加
+  chests: Chest[];
+  droppedItems: DroppedItem[];
   camera: { x: number; y: number };
   mode: 'combat' | 'build';
-  settings: GameSettings; // 追加
+  settings: GameSettings;
+  location: LocationInfo; // 現在の場所情報
 }
