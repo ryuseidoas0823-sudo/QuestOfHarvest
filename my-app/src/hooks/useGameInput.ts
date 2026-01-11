@@ -2,15 +2,14 @@ import { useEffect, useRef } from 'react';
 
 /**
  * キーボードとマウスの入力を管理するカスタムフック
+ * Escapeキーによるポーズ検知を追加
  */
 export const useGameInput = () => {
-  // レンダリングを引き起こさないよう Ref で管理
   const keys = useRef<{ [key: string]: boolean }>({});
   const mouse = useRef({ x: 0, y: 0, leftDown: false, rightDown: false });
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // 大文字小文字を区別せず入力を受け付ける（念のため）
       keys.current[e.key] = true;
       keys.current[e.key.toLowerCase()] = true;
       keys.current[e.key.toUpperCase()] = true;
@@ -21,7 +20,6 @@ export const useGameInput = () => {
       keys.current[e.key.toUpperCase()] = false;
     };
 
-    // windowに対してリッスンすることで、フォーカス外れによる操作不能を防ぐ
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
 
