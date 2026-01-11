@@ -1,2 +1,1 @@
-# QuestOfHarvest
-ハクスラ・ローグライク作れたらいいな
+git init
