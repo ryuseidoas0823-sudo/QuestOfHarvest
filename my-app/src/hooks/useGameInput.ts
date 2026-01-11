@@ -10,12 +10,18 @@ export const useGameInput = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // 大文字小文字を区別せず入力を受け付ける（念のため）
       keys.current[e.key] = true;
+      keys.current[e.key.toLowerCase()] = true;
+      keys.current[e.key.toUpperCase()] = true;
     };
     const handleKeyUp = (e: KeyboardEvent) => {
       keys.current[e.key] = false;
+      keys.current[e.key.toLowerCase()] = false;
+      keys.current[e.key.toUpperCase()] = false;
     };
 
+    // windowに対してリッスンすることで、フォーカス外れによる操作不能を防ぐ
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
 
@@ -48,7 +54,7 @@ export const useGameInput = () => {
       onMouseMove: handleMouseMove,
       onMouseDown: handleMouseDown,
       onMouseUp: handleMouseUp,
-      onContextMenu: (e: React.MouseEvent) => e.preventDefault(), // 右クリックメニュー抑制
+      onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
     }
   };
 };
