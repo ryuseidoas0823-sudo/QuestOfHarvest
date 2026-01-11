@@ -2,7 +2,8 @@
 
 export type TileType = 
   | 'grass' | 'dirt' | 'wall' | 'water' | 'crop' 
-  | 'mountain' | 'dungeon_entrance' | 'stairs_down' | 'portal_out';
+  | 'mountain' | 'dungeon_entrance' | 'stairs_down' | 'portal_out'
+  | 'town_entrance' | 'shop_floor'; // 村関連追加
 
 export interface Tile {
   x: number;
@@ -10,7 +11,7 @@ export interface Tile {
   type: TileType;
   solid: boolean;
   cropGrowth?: number;
-  meta?: any; // ダンジョンの深さなどを保持
+  meta?: any; 
 }
 
 // アイテム・装備関連
@@ -29,6 +30,7 @@ export interface Item {
     attack?: number;
     defense?: number;
     hp?: number;
+    mp?: number; // MP追加
   };
   isBossDrop?: boolean;
 }
@@ -55,7 +57,8 @@ export interface DroppedItem {
 }
 
 // エンティティ
-export type EntityType = 'player' | 'enemy' | 'item' | 'boss';
+export type EntityType = 'player' | 'enemy' | 'item' | 'boss' | 'npc' | 'companion';
+export type Job = 'Warrior' | 'Mage' | 'Archer' | 'Cleric'; // 職業
 
 export interface Entity {
   id: string;
@@ -72,17 +75,37 @@ export interface Entity {
 export interface CombatEntity extends Entity {
   hp: number;
   maxHp: number;
+  mp: number;     // MP追加
+  maxMp: number;  // 最大MP追加
   level: number;
   defense: number;
   attack: number;
+  job?: Job; // 職業
 }
 
 export interface PlayerEntity extends CombatEntity {
   type: 'player';
   stamina: number;
   inventory: InventoryItem[];
+  gold: number; // お金追加
   xp: number;
   nextLevelXp: number;
+}
+
+export interface CompanionEntity extends CombatEntity {
+  type: 'companion';
+  joinDate: number; // 加入日（古株判定など）
+}
+
+export type NPCRole = 'inn' | 'weapon' | 'item' | 'revive' | 'recruit' | 'villager';
+
+export interface NPCEntity extends Entity {
+  type: 'npc';
+  role: NPCRole;
+  name: string;
+  dialogue: string[];
+  shopInventory?: Item[]; // 店の商品
+  recruitList?: CompanionEntity[]; // 紹介屋のリスト
 }
 
 export interface EnemyEntity extends CombatEntity {
@@ -113,22 +136,27 @@ export interface GameSettings {
 
 // マップロケーション情報
 export interface LocationInfo {
-  type: 'world' | 'dungeon';
-  level: number;       // ワールドなら0、ダンジョンなら階層
-  maxDepth?: number;   // ダンジョンの最大階層
-  dungeonId?: string;  // 入ったダンジョンのID
-  difficultyMult?: number; // ダンジョンごとの難易度倍率
+  type: 'world' | 'dungeon' | 'town'; // town追加
+  level: number;       
+  maxDepth?: number;   
+  dungeonId?: string;  
+  difficultyMult?: number; 
+  townId?: string; // 村ID
+  mapsSinceLastTown?: number; // 最後の村から何マップ経過したか
 }
 
 export interface GameState {
   map: Tile[][];
   player: PlayerEntity;
+  party: CompanionEntity[]; // パーティーメンバー（仲間）
   enemies: EnemyEntity[];
+  npcs: NPCEntity[]; // NPCリスト追加
   particles: Particle[];
   chests: Chest[];
   droppedItems: DroppedItem[];
   camera: { x: number; y: number };
   mode: 'combat' | 'build';
   settings: GameSettings;
-  location: LocationInfo; // 現在の場所情報
+  location: LocationInfo; 
+  activeShop?: NPCEntity | null; // 現在開いているショップ
 }
