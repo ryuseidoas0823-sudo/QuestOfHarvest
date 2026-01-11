@@ -44,14 +44,13 @@ export default function App() {
         {user ? (
           <GameScreen user={user} />
         ) : (
-          // 認証待ちの間の背景プレースホルダー（必要に応じて）
           <div className="text-gray-600 text-sm">Initializing Game World...</div>
         )}
       </main>
       
-      {/* バージョン情報やフッターなど */}
+      {/* フッター */}
       <footer className="absolute bottom-1 right-2 text-xs text-gray-600 pointer-events-none z-0">
-        v0.2.0-alpha
+        v0.2.2-alpha
       </footer>
     </div>
   );
