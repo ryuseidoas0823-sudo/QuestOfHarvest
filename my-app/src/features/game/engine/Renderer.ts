@@ -1,6 +1,6 @@
 import { GAME_CONFIG } from '../../../assets/constants';
 import { THEME } from '../../../assets/theme';
-import { GameState } from '../types';
+import { GameState, Tile } from '../types';
 
 /**
  * ゲーム状態をCanvasに描画する関数
@@ -33,7 +33,6 @@ export const renderGame = (
         const px = x * TILE_SIZE;
         const py = y * TILE_SIZE;
         
-        // ベースカラー
         switch (tile.type) {
           case 'grass': ctx.fillStyle = THEME.colors.grass; break;
           case 'dirt': ctx.fillStyle = THEME.colors.dirt; break;
@@ -44,90 +43,53 @@ export const renderGame = (
           case 'dungeon_entrance': ctx.fillStyle = THEME.colors.dungeonEntrance; break;
           case 'stairs_down': ctx.fillStyle = THEME.colors.stairs; break;
           case 'portal_out': ctx.fillStyle = THEME.colors.portal; break;
+          case 'town_entrance': ctx.fillStyle = THEME.colors.townEntrance; break;
+          case 'shop_floor': ctx.fillStyle = THEME.colors.shopFloor; break;
           default: ctx.fillStyle = '#000';
         }
         
         ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
 
-        // タイル装飾
-        if (tile.type === 'grass') {
-          ctx.fillStyle = THEME.colors.grassHighlight;
-          ctx.fillRect(px + 5, py + 5, 4, 4);
-          ctx.fillRect(px + 20, py + 15, 3, 3);
-        }
-        else if (tile.type === 'wall') {
-          ctx.strokeStyle = '#222';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(px, py, TILE_SIZE, TILE_SIZE);
-          // ひび割れ表現
-          ctx.beginPath();
-          ctx.moveTo(px + 5, py + 5);
-          ctx.lineTo(px + 15, py + 15);
-          ctx.stroke();
-        }
-        else if (tile.type === 'mountain') {
-          // 山脈の立体感
-          ctx.fillStyle = '#2c2c2c';
-          ctx.beginPath();
-          ctx.moveTo(px, py + TILE_SIZE);
-          ctx.lineTo(px + TILE_SIZE/2, py);
-          ctx.lineTo(px + TILE_SIZE, py + TILE_SIZE);
-          ctx.fill();
-        }
-        else if (tile.type === 'dungeon_entrance') {
-          // 入り口の穴
-          ctx.fillStyle = '#000';
-          ctx.beginPath();
-          ctx.arc(px + TILE_SIZE/2, py + TILE_SIZE/2, TILE_SIZE/3, 0, Math.PI*2);
-          ctx.fill();
-        }
-        else if (tile.type === 'stairs_down') {
-           // 階段
-           ctx.fillStyle = '#000';
-           for(let i=0; i<3; i++) {
-             ctx.fillRect(px + 5 + i*5, py + 5 + i*8, 20, 5);
-           }
-        }
-        else if (tile.type === 'portal_out') {
-           // 渦巻き
-           ctx.strokeStyle = '#fff';
-           ctx.beginPath();
-           ctx.arc(px + TILE_SIZE/2, py + TILE_SIZE/2, 10, 0, Math.PI*2);
-           ctx.stroke();
+        // 装飾
+        if (tile.type === 'town_entrance') {
+          ctx.fillStyle = '#fff';
+          ctx.font = '20px serif';
+          ctx.fillText('⌂', px + 10, py + 25);
         }
       }
     }
   }
 
-  // --- 2. 宝箱 ---
-  state.chests.forEach(chest => {
-    ctx.fillStyle = chest.opened ? '#5d4037' : '#ffd700';
-    ctx.fillRect(chest.x + 5, chest.y + 10, 30, 20);
-    // 鍵穴
-    if (!chest.opened) {
-      ctx.fillStyle = '#000';
-      ctx.fillRect(chest.x + 18, chest.y + 15, 4, 6);
-    }
-  });
-
-  // --- 3. ドロップアイテム ---
-  state.droppedItems.forEach(drop => {
-    // レアリティで色変え
-    let color = '#fff';
-    if (drop.item.rarity === 'legendary') color = '#ff8800';
-    else if (drop.item.rarity === 'rare') color = '#0088ff';
-    
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 10;
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(drop.x, drop.y, 5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-  });
-
-  // --- 4. エンティティ ---
+  // --- 2. エンティティ描画 ---
   
+  // NPC
+  state.npcs.forEach(npc => {
+    ctx.fillStyle = THEME.colors.npc;
+    ctx.fillRect(npc.x, npc.y, npc.width, npc.height);
+    // Role icon
+    ctx.fillStyle = '#000';
+    ctx.font = '10px sans-serif';
+    ctx.fillText(npc.role.substring(0, 1).toUpperCase(), npc.x + 8, npc.y + 16);
+    // Name tag
+    ctx.fillStyle = '#fff';
+    ctx.font = '10px serif';
+    ctx.fillText(npc.name, npc.x, npc.y - 5);
+  });
+
+  // 仲間
+  state.party.forEach(comp => {
+    if (comp.dead) return; // 死んでたら描画しない（あるいは墓石）
+    ctx.fillStyle = THEME.colors.companion;
+    ctx.fillRect(comp.x, comp.y, comp.width, comp.height);
+    
+    // HP Bar
+    const hpPercent = comp.hp / comp.maxHp;
+    ctx.fillStyle = 'black';
+    ctx.fillRect(comp.x, comp.y - 6, comp.width, 4);
+    ctx.fillStyle = hpPercent > 0.5 ? 'cyan' : 'red';
+    ctx.fillRect(comp.x, comp.y - 6, comp.width * hpPercent, 4);
+  });
+
   // プレイヤー
   const p = state.player;
   ctx.shadowBlur = 15;
@@ -139,60 +101,31 @@ export const renderGame = (
   // 敵
   state.enemies.forEach(e => {
     ctx.fillStyle = e.type === 'boss' ? THEME.colors.boss : e.color;
-    
-    // ボスは少し大きく描画
     const w = e.type === 'boss' ? e.width * 1.5 : e.width;
     const h = e.type === 'boss' ? e.height * 1.5 : e.height;
     const drawX = e.x - (w - e.width)/2;
     const drawY = e.y - (h - e.height)/2;
-
     ctx.fillRect(drawX, drawY, w, h);
     
-    // HP Bar
     const hpPercent = e.hp / e.maxHp;
     ctx.fillStyle = 'black';
     ctx.fillRect(drawX, drawY - 10, w, 6);
     ctx.fillStyle = hpPercent > 0.5 ? 'green' : 'red';
     ctx.fillRect(drawX, drawY - 10, w * hpPercent, 6);
-    
-    if (e.type === 'boss') {
-      ctx.strokeStyle = '#ffd700';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(drawX, drawY - 10, w, 6);
-      ctx.fillText("BOSS", drawX, drawY - 15);
-    }
-  });
-
-  // パーティクル
-  state.particles.forEach(pt => {
-    ctx.globalAlpha = pt.life;
-    ctx.fillStyle = pt.color;
-    ctx.beginPath();
-    ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1.0;
   });
 
   // マウスカーソル
-  if (state.mode === 'build') {
-    const mx = Math.floor((input.mouse.x + state.camera.x) / TILE_SIZE) * TILE_SIZE;
-    const my = Math.floor((input.mouse.y + state.camera.y) / TILE_SIZE) * TILE_SIZE;
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(mx, my, TILE_SIZE, TILE_SIZE);
-  } else {
-    ctx.strokeStyle = 'red';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(input.mouse.x + state.camera.x, input.mouse.y + state.camera.y, 10, 0, Math.PI * 2);
-    ctx.stroke();
-  }
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(input.mouse.x + state.camera.x - 5, input.mouse.y + state.camera.y - 5, 10, 10);
 
-  // 場所表示
   ctx.restore();
+  
+  // UI Overlay
   ctx.fillStyle = '#fff';
   ctx.font = '20px serif';
   ctx.textAlign = 'right';
-  const locName = state.location.type === 'world' ? 'Overworld' : `Dungeon B${state.location.level}`;
+  const locName = state.location.type === 'world' ? 'Overworld' : state.location.type === 'town' ? 'Village' : `Dungeon B${state.location.level}`;
   ctx.fillText(locName, width - 20, 30);
+  ctx.fillText(`Gold: ${state.player.gold}`, width - 20, 60);
 };
