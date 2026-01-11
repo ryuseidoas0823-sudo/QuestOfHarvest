@@ -1,22 +1,26 @@
 export const THEME = {
   colors: {
-    ground: '#1a1a1a',      // 背景の暗闇
-    grass: '#1e2b1e',       // 暗い草地
+    ground: '#1a1a1a',
+    grass: '#1e2b1e',
     grassHighlight: '#2a3d2a',
-    dirt: '#3e2723',        // 土
-    wall: '#424242',        // 石壁 (破壊可能)
-    mountain: '#1b1b1b',    // 山脈 (破壊不可・通行不可)
-    water: '#1a237e',       // 水
+    dirt: '#3e2723',
+    wall: '#424242',
+    mountain: '#1b1b1b',
+    water: '#1a237e',
     
     // ダンジョン・特殊タイル
-    dungeonEntrance: '#4a148c', // 紫色の入り口
-    stairs: '#ffd700',          // 階段
-    portal: '#00bcd4',          // 脱出ポータル
+    dungeonEntrance: '#4a148c',
+    stairs: '#ffd700',
+    portal: '#00bcd4',
+    townEntrance: '#8bc34a', // 村の入り口（明るい緑）
+    shopFloor: '#5d4037',    // 店の床
     
     // エンティティ
-    player: '#d4af37',      // 真鍮/ゴールド色
-    enemy: '#8b0000',       // 血のような赤
-    boss: '#ff4500',        // ボス（オレンジレッド）
+    player: '#d4af37',
+    enemy: '#8b0000',
+    boss: '#ff4500',
+    companion: '#00bfff',    // 仲間（ディープスカイブルー）
+    npc: '#ffffff',          // NPC（白）
     
     // エフェクト
     light: 'rgba(255, 200, 100, 0.1)',
