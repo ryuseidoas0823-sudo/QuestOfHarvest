@@ -1,60 +1,87 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc } from 'firebase/firestore';
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, User } from 'firebase/auth';
+import { getFirestore, doc, setDoc } from 'firebase/firestore';
 import { 
   Sword, 
   Shovel, 
   Save, 
   ShieldAlert, 
-  Heart, 
-  Zap, 
   Backpack,
   Skull
 } from 'lucide-react';
 
 /**
  * ====================================================================
- * CONFIGURATION & UTILS
+ * 【仮想アセットファイル】
+ * 本来は src/assets/ フォルダに配置され、importして使用するコード群です。
+ * Canvas環境での動作を保証するため、同一ファイル内に記述しています。
  * ====================================================================
  */
-const TILE_SIZE = 40;
-const MAP_WIDTH = 50;
-const MAP_HEIGHT = 50;
-const VIEWPORT_WIDTH = 800;
-const VIEWPORT_HEIGHT = 600;
 
-// Colors for Diablo-esque vibe
-const COLORS = {
-  ground: '#1a1a1a',      // Dark base
-  grass: '#1e2b1e',       // Dark green
-  grassHighlight: '#2a3d2a',
-  dirt: '#3e2723',        // Dark brown
-  wall: '#424242',        // Stone grey
-  player: '#d4af37',      // Gold/Brass
-  enemy: '#8b0000',       // Blood red
-  light: 'rgba(255, 200, 100, 0.1)',
-  fog: 'rgba(0, 0, 0, 0.85)',
-  crop: '#4caf50',
-  uiBg: 'rgba(20, 10, 10, 0.9)',
-  uiBorder: '#5d4037'
-};
+// --- src/assets/constants.ts ---
+const GAME_CONFIG = {
+  // マップ設定
+  TILE_SIZE: 40,
+  MAP_WIDTH: 50,
+  MAP_HEIGHT: 50,
+  
+  // ビューポート（画面サイズ）設定
+  VIEWPORT_WIDTH: 800,
+  VIEWPORT_HEIGHT: 600,
+  
+  // ゲームプレイ設定
+  PLAYER_SPEED: 3,
+  ENEMY_BASE_SPEED: 1,
+  ENEMY_SPAWN_RATE: 0.01,
+  MAX_ENEMIES: 50,
+  
+  // インベントリ制限など
+  MAX_INVENTORY_SLOTS: 20,
+} as const;
 
-// --- Firebase Setup (Using global vars for Canvas environment) ---
-const firebaseConfig = JSON.parse(
-  typeof window !== 'undefined' && (window as any).__firebase_config 
-    ? (window as any).__firebase_config 
-    : '{}'
-);
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = (window as any).__app_id || 'default-app-id';
+// --- src/assets/theme.ts ---
+const THEME = {
+  colors: {
+    ground: '#1a1a1a',      // 背景の暗闇
+    grass: '#1e2b1e',       // 暗い草地
+    grassHighlight: '#2a3d2a',
+    dirt: '#3e2723',        // 土
+    wall: '#424242',        // 石壁
+    water: '#1a237e',       // 水（追加）
+    
+    // エンティティ
+    player: '#d4af37',      // 真鍮/ゴールド色
+    enemy: '#8b0000',       // 血のような赤
+    
+    // エフェクト
+    light: 'rgba(255, 200, 100, 0.1)', // 松明の光
+    fog: 'rgba(0, 0, 0, 0.85)',        // 戦場の霧
+    blood: '#8b0000',
+    magic: '#4169e1',
+    crop: '#4caf50',
+    
+    // UI
+    uiBg: 'rgba(20, 10, 10, 0.95)',
+    uiBorder: '#5d4037',
+    textMain: '#c0c0c0',
+    textHighlight: '#d4af37',
+  },
+  fonts: {
+    main: '"Cinzel", serif', // ファンタジー風フォント
+  }
+} as const;
+
+// --- src/assets/resources.ts ---
+const SPRITES = {
+  // 実際の実装ではここに画像パスが入りますが、今回はCanvas描画のためプレースホルダーとして定義
+  player: { idle: 'hero_idle' },
+  terrain: { grass: 'grass_tile' }
+} as const;
 
 /**
  * ====================================================================
- * GAME TYPES & INTERFACES (Scalability Layer)
- * Separate these into src/features/game/types/ in the future.
+ * GAME TYPES & INTERFACES
  * ====================================================================
  */
 
@@ -103,14 +130,15 @@ interface GameState {
 
 /**
  * ====================================================================
- * GAME ENGINE & LOGIC
- * Separate these into src/features/game/engine/
+ * GAME LOGIC HELPER FUNCTIONS
  * ====================================================================
  */
 
-// --- Map Generation (Procedural) ---
+// --- Map Generation ---
 const generateMap = (): Tile[][] => {
   const map: Tile[][] = [];
+  const { MAP_WIDTH, MAP_HEIGHT } = GAME_CONFIG;
+
   for (let y = 0; y < MAP_HEIGHT; y++) {
     const row: Tile[] = [];
     for (let x = 0; x < MAP_WIDTH; x++) {
@@ -148,7 +176,8 @@ const checkCollision = (rect1: Entity, rect2: Entity) => {
 };
 
 const resolveMapCollision = (entity: Entity, map: Tile[][]) => {
-  // Check corners of entity against map tiles
+  const { TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } = GAME_CONFIG;
+  
   const corners = [
     { x: entity.x, y: entity.y },
     { x: entity.x + entity.width, y: entity.y },
@@ -162,7 +191,7 @@ const resolveMapCollision = (entity: Entity, map: Tile[][]) => {
 
     if (tileY >= 0 && tileY < MAP_HEIGHT && tileX >= 0 && tileX < MAP_WIDTH) {
       if (map[tileY][tileX].solid) {
-        return true; // Simple boolean return for now, pushback logic omitted for brevity
+        return true;
       }
     }
   }
@@ -171,14 +200,26 @@ const resolveMapCollision = (entity: Entity, map: Tile[][]) => {
 
 /**
  * ====================================================================
- * REACT COMPONENT
+ * MAIN COMPONENT
  * ====================================================================
  */
-export default function DiabloCloneGame() {
+
+// Firebase Setup
+const firebaseConfig = JSON.parse(
+  typeof window !== 'undefined' && (window as any).__firebase_config 
+    ? (window as any).__firebase_config 
+    : '{}'
+);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = (window as any).__app_id || 'default-app-id';
+
+export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [user, setUser] = useState<User | null>(null);
   
-  // React State for UI (separate from Game Loop State)
+  // React State for UI
   const [uiState, setUiState] = useState({
     hp: 100,
     maxHp: 100,
@@ -188,19 +229,19 @@ export default function DiabloCloneGame() {
     enemyCount: 0
   });
 
-  // Mutable Game State (Ref prevents re-renders)
+  // Mutable Game State
   const gameState = useRef<GameState>({
     map: generateMap(),
     player: {
       id: 'p1',
-      x: TILE_SIZE * 5,
-      y: TILE_SIZE * 5,
+      x: GAME_CONFIG.TILE_SIZE * 5,
+      y: GAME_CONFIG.TILE_SIZE * 5,
       width: 24,
       height: 24,
-      color: COLORS.player,
+      color: THEME.colors.player,
       hp: 100,
       maxHp: 100,
-      speed: 3,
+      speed: GAME_CONFIG.PLAYER_SPEED,
       type: 'player',
       dead: false,
       stamina: 100,
@@ -218,32 +259,34 @@ export default function DiabloCloneGame() {
 
   // --- Auth & Init ---
   useEffect(() => {
-    const init = async () => {
-      if ((window as any).__initial_auth_token) {
-        // Handle custom token if provided
+    const initAuth = async () => {
+      if (typeof (window as any).__initial_auth_token !== 'undefined' && (window as any).__initial_auth_token) {
+        await signInWithCustomToken(auth, (window as any).__initial_auth_token);
       } else {
         await signInAnonymously(auth);
       }
     };
-    init();
-    onAuthStateChanged(auth, (u) => setUser(u));
-
-    // Spawn initial enemies
-    for(let i=0; i<10; i++) {
-        spawnEnemy();
-    }
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    
+    // Initial Spawns
+    for(let i=0; i<10; i++) spawnEnemy();
+    
+    return () => unsubscribe();
   }, []);
 
   const spawnEnemy = () => {
+    const { MAP_WIDTH, MAP_HEIGHT, TILE_SIZE, ENEMY_BASE_SPEED } = GAME_CONFIG;
     const x = Math.random() * (MAP_WIDTH * TILE_SIZE);
     const y = Math.random() * (MAP_HEIGHT * TILE_SIZE);
+    
     gameState.current.enemies.push({
       id: `e_${Date.now()}_${Math.random()}`,
       x, y,
       width: 30, height: 30,
-      color: COLORS.enemy,
+      color: THEME.colors.enemy,
       hp: 30, maxHp: 30,
-      speed: 1 + Math.random(),
+      speed: ENEMY_BASE_SPEED + Math.random(),
       type: 'enemy',
       dead: false
     });
@@ -270,6 +313,7 @@ export default function DiabloCloneGame() {
     if (!ctx) return;
 
     let animationFrameId: number;
+    const { VIEWPORT_WIDTH, VIEWPORT_HEIGHT, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } = GAME_CONFIG;
 
     const loop = () => {
       update();
@@ -289,14 +333,12 @@ export default function DiabloCloneGame() {
       if (keys.current['a'] || keys.current['ArrowLeft']) dx = -player.speed;
       if (keys.current['d'] || keys.current['ArrowRight']) dx = player.speed;
 
-      // Normalize diagonal movement
       if (dx !== 0 && dy !== 0) {
         const length = Math.sqrt(dx * dx + dy * dy);
         dx = (dx / length) * player.speed;
         dy = (dy / length) * player.speed;
       }
 
-      // Prediction for collision
       const prevX = player.x;
       const prevY = player.y;
       player.x += dx;
@@ -307,75 +349,65 @@ export default function DiabloCloneGame() {
       // 2. Camera Follow
       state.camera.x = player.x - VIEWPORT_WIDTH / 2;
       state.camera.y = player.y - VIEWPORT_HEIGHT / 2;
-      // Clamp camera
       state.camera.x = Math.max(0, Math.min(state.camera.x, MAP_WIDTH * TILE_SIZE - VIEWPORT_WIDTH));
       state.camera.y = Math.max(0, Math.min(state.camera.y, MAP_HEIGHT * TILE_SIZE - VIEWPORT_HEIGHT));
 
-      // 3. Enemy Logic (Simple Chase)
+      // 3. Enemy Logic
       state.enemies.forEach(enemy => {
         if (enemy.dead) return;
         const dist = Math.sqrt((player.x - enemy.x) ** 2 + (player.y - enemy.y) ** 2);
         
-        // Chase if close
         if (dist < 400 && dist > 10) {
             const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
             enemy.x += Math.cos(angle) * enemy.speed;
             enemy.y += Math.sin(angle) * enemy.speed;
         }
 
-        // Attack Player
         if (checkCollision(player, enemy)) {
-            player.hp -= 0.1; // Damage over time on contact
-            if (Math.random() > 0.9) createParticles(player.x, player.y, '#ff0000', 1);
+            player.hp -= 0.1;
+            if (Math.random() > 0.9) createParticles(player.x, player.y, THEME.colors.blood, 1);
         }
       });
 
-      // 4. Mouse Interactions (Combat & Building)
+      // 4. Interactions
       if (mouse.current.leftDown) {
-        // Combat Mode: Attack
+        const worldMx = mouse.current.x + state.camera.x;
+        const worldMy = mouse.current.y + state.camera.y;
+
         if (state.mode === 'combat') {
-             // Simple "Click to damage nearby enemies" logic (AOE around mouse)
-             const worldMx = mouse.current.x + state.camera.x;
-             const worldMy = mouse.current.y + state.camera.y;
-             
              state.enemies.forEach(enemy => {
                  if (enemy.dead) return;
                  const d = Math.sqrt((worldMx - enemy.x)**2 + (worldMy - enemy.y)**2);
                  if (d < 50) {
                      enemy.hp -= 2;
-                     createParticles(enemy.x, enemy.y, '#ffffff', 2); // Hit spark
-                     createParticles(enemy.x, enemy.y, '#8b0000', 2); // Blood
+                     createParticles(enemy.x, enemy.y, '#ffffff', 2);
+                     createParticles(enemy.x, enemy.y, THEME.colors.blood, 2);
                      if (enemy.hp <= 0) {
                          enemy.dead = true;
-                         createParticles(enemy.x, enemy.y, '#ff0000', 10);
+                         createParticles(enemy.x, enemy.y, THEME.colors.blood, 10);
                          state.player.inventory.push({ id: 'loot', name: 'Gold' });
                      }
                  }
              });
-        }
-        // Build Mode: Interact with tiles
-        else if (state.mode === 'build') {
-             const worldMx = mouse.current.x + state.camera.x;
-             const worldMy = mouse.current.y + state.camera.y;
+        } else if (state.mode === 'build') {
              const tx = Math.floor(worldMx / TILE_SIZE);
              const ty = Math.floor(worldMy / TILE_SIZE);
              
              if (ty >= 0 && ty < MAP_HEIGHT && tx >= 0 && tx < MAP_WIDTH) {
                  const tile = state.map[ty][tx];
-                 // Farm logic: Grass -> Dirt -> Crop
                  if (tile.type === 'grass') {
                      tile.type = 'dirt';
-                     createParticles(worldMx, worldMy, '#5d4037', 5);
+                     createParticles(worldMx, worldMy, THEME.colors.dirt, 5);
                  } else if (tile.type === 'dirt') {
                      tile.type = 'crop';
                      tile.cropGrowth = 0;
-                     createParticles(worldMx, worldMy, '#4caf50', 5);
+                     createParticles(worldMx, worldMy, THEME.colors.crop, 5);
                  }
              }
         }
       }
 
-      // 5. Particles Update
+      // 5. Cleanup
       state.particles = state.particles.filter(p => p.life > 0);
       state.particles.forEach(p => {
           p.x += p.vx;
@@ -383,12 +415,11 @@ export default function DiabloCloneGame() {
           p.life -= 0.05;
       });
 
-      // Cleanup Dead Entities
       state.enemies = state.enemies.filter(e => !e.dead);
       if (state.enemies.length < 5 && Math.random() > 0.99) spawnEnemy();
 
-      // Sync React UI (Throttle this in real production)
-      if (Math.random() > 0.9) { // Sync occasionally to save performance
+      // Sync UI occasionally
+      if (Math.random() > 0.9) {
           setUiState(prev => ({
               ...prev,
               hp: player.hp,
@@ -402,15 +433,13 @@ export default function DiabloCloneGame() {
       const state = gameState.current;
       const { width, height } = canvas;
       
-      // Clear Screen
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, width, height);
 
-      // --- Save Context for Camera ---
       ctx.save();
       ctx.translate(-state.camera.x, -state.camera.y);
 
-      // 1. Draw Map (Only visible tiles optimization)
+      // Draw Map
       const startCol = Math.floor(state.camera.x / TILE_SIZE);
       const endCol = startCol + (width / TILE_SIZE) + 1;
       const startRow = Math.floor(state.camera.y / TILE_SIZE);
@@ -421,21 +450,19 @@ export default function DiabloCloneGame() {
           if (y >= 0 && y < MAP_HEIGHT && x >= 0 && x < MAP_WIDTH) {
             const tile = state.map[y][x];
             
-            // Base Texture
-            if (tile.type === 'grass') ctx.fillStyle = COLORS.grass;
-            if (tile.type === 'dirt') ctx.fillStyle = COLORS.dirt;
-            if (tile.type === 'wall') ctx.fillStyle = COLORS.wall;
-            if (tile.type === 'crop') ctx.fillStyle = COLORS.dirt;
+            if (tile.type === 'grass') ctx.fillStyle = THEME.colors.grass;
+            if (tile.type === 'dirt') ctx.fillStyle = THEME.colors.dirt;
+            if (tile.type === 'wall') ctx.fillStyle = THEME.colors.wall;
+            if (tile.type === 'crop') ctx.fillStyle = THEME.colors.dirt;
             
             ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
 
-            // Details
             if (tile.type === 'grass') {
-                ctx.fillStyle = COLORS.grassHighlight;
+                ctx.fillStyle = THEME.colors.grassHighlight;
                 ctx.fillRect(x * TILE_SIZE + 5, y * TILE_SIZE + 5, 4, 4);
             }
             if (tile.type === 'crop') {
-                ctx.fillStyle = COLORS.crop;
+                ctx.fillStyle = THEME.colors.crop;
                 ctx.beginPath();
                 ctx.arc(x * TILE_SIZE + 20, y * TILE_SIZE + 20, 8, 0, Math.PI * 2);
                 ctx.fill();
@@ -448,27 +475,23 @@ export default function DiabloCloneGame() {
         }
       }
 
-      // 2. Draw Entities
-      // Player
+      // Draw Entities
       const p = state.player;
       ctx.shadowBlur = 15;
       ctx.shadowColor = 'rgba(212, 175, 55, 0.5)';
       ctx.fillStyle = p.color;
       ctx.fillRect(p.x, p.y, p.width, p.height);
-      ctx.shadowBlur = 0; // Reset
+      ctx.shadowBlur = 0;
 
-      // Enemies
       state.enemies.forEach(e => {
           ctx.fillStyle = e.color;
           ctx.fillRect(e.x, e.y, e.width, e.height);
-          // HP Bar for Enemy
           ctx.fillStyle = 'black';
           ctx.fillRect(e.x, e.y - 8, e.width, 4);
           ctx.fillStyle = 'red';
           ctx.fillRect(e.x, e.y - 8, e.width * (e.hp / e.maxHp), 4);
       });
 
-      // Particles
       state.particles.forEach(p => {
           ctx.globalAlpha = p.life;
           ctx.fillStyle = p.color;
@@ -478,7 +501,7 @@ export default function DiabloCloneGame() {
           ctx.globalAlpha = 1.0;
       });
 
-      // Mouse Cursor Indicator (Grid)
+      // Cursor
       if (state.mode === 'build') {
           const mx = Math.floor((mouse.current.x + state.camera.x) / TILE_SIZE) * TILE_SIZE;
           const my = Math.floor((mouse.current.y + state.camera.y) / TILE_SIZE) * TILE_SIZE;
@@ -486,39 +509,36 @@ export default function DiabloCloneGame() {
           ctx.lineWidth = 2;
           ctx.strokeRect(mx, my, TILE_SIZE, TILE_SIZE);
       } else {
-          // Combat Cursor
           ctx.strokeStyle = 'red';
           ctx.beginPath();
           ctx.arc(mouse.current.x + state.camera.x, mouse.current.y + state.camera.y, 10, 0, Math.PI * 2);
           ctx.stroke();
       }
 
-      ctx.restore(); // Restore camera transform
+      ctx.restore();
 
-      // 3. Lighting Overlay (Diablo Fog of War)
-      // Create a radial gradient transparency around player
+      // Lighting Overlay
       const gradient = ctx.createRadialGradient(
           p.x - state.camera.x + p.width/2, 
           p.y - state.camera.y + p.height/2, 
-          50, // Inner radius (bright)
+          50, 
           p.x - state.camera.x + p.width/2, 
           p.y - state.camera.y + p.height/2, 
-          400 // Outer radius (dark)
+          400
       );
-      gradient.addColorStop(0, 'rgba(0,0,0,0)'); // Transparent at center
+      gradient.addColorStop(0, 'rgba(0,0,0,0)');
       gradient.addColorStop(0.8, 'rgba(0,0,0,0.6)'); 
-      gradient.addColorStop(1, 'rgba(0,0,0,0.95)'); // Pitch black at edges
+      gradient.addColorStop(1, THEME.colors.fog);
 
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, width, height);
-
     };
 
     loop();
     return () => cancelAnimationFrame(animationFrameId);
   }, []);
 
-  // --- Input Event Handlers ---
+  // --- Input & Save ---
   const handleKeyDown = (e: KeyboardEvent) => {
       keys.current[e.key] = true;
       if (e.key === 'q') toggleMode();
@@ -550,7 +570,6 @@ export default function DiabloCloneGame() {
     };
   }, []);
 
-  // --- Actions ---
   const toggleMode = () => {
       gameState.current.mode = gameState.current.mode === 'combat' ? 'build' : 'combat';
       setUiState(prev => ({ ...prev, mode: gameState.current.mode }));
@@ -626,16 +645,16 @@ export default function DiabloCloneGame() {
       </div>
 
       {/* Game Canvas */}
-      <div className="relative border-4 border-[#3e2723] shadow-2xl rounded-lg overflow-hidden bg-[#1a1a1a]">
+      <div className="relative border-4" style={{ borderColor: THEME.colors.uiBorder, backgroundColor: THEME.colors.ground, borderRadius: '8px', overflow: 'hidden' }}>
         <canvas
             ref={canvasRef}
-            width={VIEWPORT_WIDTH}
-            height={VIEWPORT_HEIGHT}
+            width={GAME_CONFIG.VIEWPORT_WIDTH}
+            height={GAME_CONFIG.VIEWPORT_HEIGHT}
             onMouseMove={handleMouseMove}
             onMouseDown={handleMouseDown}
             onMouseUp={handleMouseUp}
             onContextMenu={(e) => e.preventDefault()}
-            className="cursor-crosshair"
+            className="cursor-crosshair shadow-2xl"
         />
         
         {/* Loading / Auth Overlay */}
@@ -652,12 +671,11 @@ export default function DiabloCloneGame() {
       {/* Bottom Bar (Diablo Style) */}
       <div className="w-[800px] h-16 bg-[#2d1b15] border-t-4 border-[#5d4037] flex items-center justify-between px-8 mt-[-4px] rounded-b-lg shadow-lg relative z-20">
           <div className="flex gap-4">
-              <div className="w-10 h-10 bg-black border border-[#5d4037] flex items-center justify-center cursor-pointer hover:border-yellow-600">
-                  <span className="text-xs text-gray-500">1</span>
-              </div>
-              <div className="w-10 h-10 bg-black border border-[#5d4037] flex items-center justify-center cursor-pointer hover:border-yellow-600">
-                   <span className="text-xs text-gray-500">2</span>
-              </div>
+              {[1, 2].map(num => (
+                  <div key={num} className="w-10 h-10 bg-black border border-[#5d4037] flex items-center justify-center cursor-pointer hover:border-yellow-600">
+                      <span className="text-xs text-gray-500">{num}</span>
+                  </div>
+              ))}
           </div>
           
           <div className="absolute left-1/2 -translate-x-1/2 -top-8 flex gap-2">
