@@ -12,35 +12,26 @@ const ITEM_NAMES = {
   weapon: ['Rusty Sword', 'Iron Blade', 'Steel Longsword', 'Mithril Rapier', 'Dragon Slayer'],
   armor: ['Tattered Tunic', 'Leather Armor', 'Chainmail', 'Plate Mail', 'Divine Armor'],
   consumable: ['Apple', 'Potion', 'Elixir'],
+  bossWeapon: ['Demon King\'s Blade', 'Soul Reaper', 'Void Crusher', 'Chaos Edge', 'Abyssal Scepter']
 };
 
-/**
- * レベルに基づいたランダムなアイテムを生成する
- */
 export const generateRandomItem = (targetLevel: number, rarityMultiplier: number = 1.0): Item => {
-  // 1. レアリティ決定
   const rand = Math.random() * 100;
   let rarity: Rarity = 'common';
   
-  // Expertなどの補正を加味（レアが出やすくする）
-  let threshold = 0;
-  // 簡易的な確率計算（本来はもっと厳密に行う）
   if (rand > 99 - (RARITY_WEIGHTS.legendary * rarityMultiplier)) rarity = 'legendary';
   else if (rand > 95 - (RARITY_WEIGHTS.epic * rarityMultiplier)) rarity = 'epic';
   else if (rand > 85 - (RARITY_WEIGHTS.rare * rarityMultiplier)) rarity = 'rare';
   else if (rand > 60 - (RARITY_WEIGHTS.uncommon * rarityMultiplier)) rarity = 'uncommon';
 
-  // 2. アイテムタイプ決定
   const typeRand = Math.random();
   let type: ItemType = 'consumable';
   if (typeRand > 0.6) type = 'weapon';
   else if (typeRand > 0.3) type = 'armor';
 
-  // 3. レベル決定（ターゲットレベル ±3）
-  const levelVariation = Math.floor(Math.random() * 7) - 3; // -3 ~ +3
+  const levelVariation = Math.floor(Math.random() * 7) - 3;
   const level = Math.max(1, targetLevel + levelVariation);
 
-  // 4. 名前とステータス生成
   let name = '';
   const stats: any = {};
   const value = level * 10;
@@ -59,7 +50,6 @@ export const generateRandomItem = (targetLevel: number, rarityMultiplier: number
     stats.defense = Math.floor(level * 1.2 + (getRarityBonus(rarity)));
   }
 
-  // 接頭辞
   if (rarity !== 'common') {
     name = `${capitalize(rarity)} ${name}`;
   }
@@ -72,6 +62,26 @@ export const generateRandomItem = (targetLevel: number, rarityMultiplier: number
     level,
     value,
     stats,
+  };
+};
+
+// ボス専用装備生成
+export const generateBossDrop = (level: number): Item => {
+  const idx = Math.floor(Math.random() * ITEM_NAMES.bossWeapon.length);
+  const name = ITEM_NAMES.bossWeapon[idx];
+  
+  return {
+    id: crypto.randomUUID(),
+    name: `★ ${name}`,
+    type: 'weapon',
+    rarity: 'legendary',
+    level: level,
+    value: level * 100,
+    isBossDrop: true,
+    stats: {
+      attack: Math.floor(level * 3 + 50), // 強力な補正
+      hp: Math.floor(level * 10),
+    }
   };
 };
 
