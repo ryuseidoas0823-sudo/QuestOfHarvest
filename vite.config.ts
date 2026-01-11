@@ -5,7 +5,6 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   // 【重要】デプロイ環境でのパスずれを防ぐため、相対パスを基本にします
-  base: './',
   build: {
     outDir: 'dist',
     sourcemap: true,
