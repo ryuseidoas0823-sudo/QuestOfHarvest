@@ -8,7 +8,7 @@ import { GAME_CONFIG, DIFFICULTY_CONFIG } from '../../assets/constants';
 import { THEME } from '../../assets/theme';
 
 import { GameState, GameSettings, Difficulty } from './types';
-import { generateMap } from './world/MapGenerator';
+import { generateWorldMap } from './world/MapGenerator';
 import { createPlayer } from './entities/Player';
 import { createEnemy } from './entities/Enemy';
 import { updateGame } from './engine/GameLoop';
@@ -39,7 +39,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
     maxHp: 100,
     inventoryCount: 0,
     enemyCount: 0,
-    mode: 'combat' as 'combat' | 'build'
+    mode: 'combat' as 'combat' | 'build',
+    locationName: 'Overworld'
   });
 
   const gameState = useRef<GameState>({
@@ -51,15 +52,18 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
     particles: [],
     camera: { x: 0, y: 0 },
     mode: 'combat',
-    settings: settings // 初期設定
+    settings: settings,
+    location: { type: 'world', level: 0 }
   });
 
   // 初期化
   useEffect(() => {
-    // 地形と宝箱生成
-    const world = generateMap();
+    // 地形と宝箱生成（ワールドマップ）
+    const world = generateWorldMap();
     gameState.current.map = world.map;
     gameState.current.chests = world.chests;
+    gameState.current.player.x = world.spawnPoint.x;
+    gameState.current.player.y = world.spawnPoint.y;
     
     // 敵生成（難易度反映）
     const diffConfig = DIFFICULTY_CONFIG[settings.difficulty];
@@ -89,7 +93,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
     const checkPause = () => {
       if (keys.current['Escape']) {
         setIsPaused(prev => !prev);
-        // キー消費
         keys.current['Escape'] = false;
       }
     };
@@ -112,10 +115,10 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
         updateGame(gameState.current, { keys: keys.current, mouse: mouse.current }, isPaused);
       }
 
-      // 描画はポーズ中でも行う（停止画）
+      // 描画はポーズ中でも行う
       renderGame(ctx, gameState.current, { mouse: mouse.current });
 
-      // ポーズオーバーレイ描画
+      // ポーズオーバーレイ
       if (isPaused) {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -125,15 +128,18 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
         ctx.fillText("PAUSED", canvas.width / 2, canvas.height / 2);
       }
 
+      // UI同期
       if (Math.random() > 0.9) {
         const p = gameState.current.player;
+        const loc = gameState.current.location;
         setUiState(prev => ({
             ...prev,
             hp: p.hp,
             maxHp: p.maxHp,
             inventoryCount: p.inventory.length,
             enemyCount: gameState.current.enemies.length,
-            mode: gameState.current.mode
+            mode: gameState.current.mode,
+            locationName: loc.type === 'world' ? 'Overworld' : `Dungeon B${loc.level}`
         }));
       }
 
@@ -156,6 +162,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
       await setDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'saveData'), {
         player: gameState.current.player,
         settings,
+        location: gameState.current.location,
         lastSaved: new Date()
       });
       alert('Game Saved Successfully!');
@@ -176,6 +183,11 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
         onSave={handleSave}
       />
       
+      {/* 場所名表示 */}
+      <div className="absolute top-20 left-4 text-gray-400 font-serif text-sm pointer-events-none select-none">
+        Location: <span className="text-[#d4af37] font-bold">{uiState.locationName}</span>
+      </div>
+
       {/* 設定ボタン */}
       <div className="absolute top-4 right-4 z-20">
         <button 
@@ -189,7 +201,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
         </button>
       </div>
 
-      {/* 設定モーダル */}
+      {/* 設定モーダル (省略なし) */}
       {showSettings && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80">
           <div className="bg-[#2d1b15] border-2 border-[#5d4037] p-8 rounded-lg w-96 text-[#d4af37] shadow-2xl">
