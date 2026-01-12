@@ -7,16 +7,32 @@ import { TitleScreen } from './features/title/TitleScreen';
 import { AuthOverlay } from './features/auth/AuthOverlay';
 
 // Global variables provided by the environment
-declare const __firebase_config: string;
-declare const __app_id: string;
-declare const __initial_auth_token: string | undefined;
+declare global {
+  interface Window {
+    __firebase_config: string;
+    __app_id: string;
+    __initial_auth_token: string | undefined;
+  }
+}
+
+// Safely access global variables
+const firebaseConfigStr = typeof window !== 'undefined' ? window.__firebase_config : '{}';
+const appId = typeof window !== 'undefined' && window.__app_id ? window.__app_id : 'default-app-id';
+const initialAuthToken = typeof window !== 'undefined' ? window.__initial_auth_token : undefined;
 
 // Firebase Init
-const firebaseConfig = JSON.parse(__firebase_config);
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+// Ensure config is valid JSON before parsing to avoid crashes
+let firebaseConfig = {};
+try {
+  firebaseConfig = JSON.parse(firebaseConfigStr);
+} catch (e) {
+  console.error("Failed to parse firebase config", e);
+}
+
+// Initialize Firebase only if config is valid (has apiKey)
+const app = Object.keys(firebaseConfig).length > 0 ? initializeApp(firebaseConfig) : undefined;
+const auth = app ? getAuth(app) : undefined;
+const db = app ? getFirestore(app) : undefined;
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -25,10 +41,16 @@ function App() {
 
   // Auth & Save Data Check
   useEffect(() => {
+    if (!auth || !db) {
+      console.error("Firebase not initialized");
+      setIsLoading(false);
+      return;
+    }
+
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
+        if (initialAuthToken) {
+          await signInWithCustomToken(auth, initialAuthToken);
         } else {
           await signInAnonymously(auth);
         }
