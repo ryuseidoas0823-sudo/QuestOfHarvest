@@ -90,7 +90,10 @@ export interface DroppedItem {
 
 // エンティティ
 export type EntityType = 'player' | 'enemy' | 'item' | 'boss' | 'npc' | 'companion';
-export type Job = 'Warrior' | 'Mage' | 'Archer' | 'Cleric';
+
+// Job定義を拡張: Swordsman, Monkを追加 (Mageなどは仲間のために維持)
+export type Job = 'Swordsman' | 'Warrior' | 'Mage' | 'Archer' | 'Cleric' | 'Monk';
+
 export type EnemyRace = 'Slime' | 'Goblin' | 'Skeleton' | 'Wolf' | 'Orc' | 'Ghost' | 'Golem' | 'Bat' | 'Spider' | 'Dragon';
 export type EnemyRank = 'Normal' | 'Elite' | 'Boss';
 
@@ -126,12 +129,19 @@ export interface CombatEntity extends Entity {
 
 export interface PlayerEntity extends CombatEntity {
   type: 'player';
+  job: Job; // プレイヤーはJob必須
   stamina: number;
   inventory: InventoryItem[];
-  equipment: { mainHand?: InventoryItem; };
+  equipment: { mainHand?: InventoryItem; armor?: InventoryItem; accessory?: InventoryItem; };
   gold: number;
   xp: number;
   nextLevelXp: number;
+  stats: {
+    attack: number;
+    defense: number;
+    speed: number;
+    magic: number;
+  };
 }
 
 export interface CompanionEntity extends CombatEntity {
@@ -206,4 +216,7 @@ export interface GameState {
   settings: GameSettings;
   location: LocationInfo; 
   activeShop?: NPCEntity | null;
+  dialogue?: { name: string, text: string } | null;
+  isPaused: boolean;
+  gameTime: number;
 }
