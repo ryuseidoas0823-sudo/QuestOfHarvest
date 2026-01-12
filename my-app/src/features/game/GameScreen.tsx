@@ -9,7 +9,7 @@ import { StatusMenu } from '../../components/UI/StatusMenu';
 import { JobSelectionScreen } from '../../components/UI/JobSelectionScreen'; 
 import { AuthOverlay } from '../auth/AuthOverlay';
 import { getAuth, onAuthStateChanged, User } from 'firebase/auth';
-import { generateWorldChunk } from './world/MapGenerator';
+import { generateWorldChunk, generateTownMap } from './world/MapGenerator'; // TownGeneratorをインポート
 import { createPlayer } from './entities/Player';
 
 export const GameScreen: React.FC = () => {
@@ -58,10 +58,12 @@ export const GameScreen: React.FC = () => {
 
     // Initialize Game State if not exists
     if (!gameStateRef.current) {
-      const initialMap = generateWorldChunk(0, 0);
-      const initialPlayer = createPlayer(selectedJob); // 選択された職業を渡す
-      initialPlayer.x = initialMap.spawnPoint.x;
-      initialPlayer.y = initialMap.spawnPoint.y;
+      // 変更点: 最初から村マップを生成
+      const initialTown = generateTownMap(1); 
+      const initialPlayer = createPlayer(selectedJob); 
+      
+      initialPlayer.x = initialTown.spawnPoint.x;
+      initialPlayer.y = initialTown.spawnPoint.y;
 
       gameStateRef.current = {
         isPaused: false,
@@ -70,13 +72,20 @@ export const GameScreen: React.FC = () => {
         player: initialPlayer,
         party: [],
         companions: [],
-        map: initialMap.map,
-        chests: initialMap.chests,
-        npcs: initialMap.npcs,
+        map: initialTown.map, // 村マップをセット
+        chests: initialTown.chests,
+        npcs: initialTown.npcs, // NPCもセット
         enemies: [],
         droppedItems: [],
         particles: [],
-        location: { type: 'world', level: 0, worldX: 0, worldY: 0 },
+        // ロケーション情報を村に設定
+        location: { 
+          type: 'town', 
+          level: 0, 
+          worldX: 0, 
+          worldY: 0,
+          townId: 'starting_village'
+        },
         mode: 'combat',
         settings: { difficulty: 'normal', gameSpeed: 1.0, volume: 0.5, showDamage: true },
         dialogue: null,
