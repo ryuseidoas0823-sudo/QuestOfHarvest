@@ -1,10 +1,11 @@
 import { GAME_CONFIG, DIFFICULTY_CONFIG } from '../../../assets/constants';
 import { THEME } from '../../../assets/theme';
-import { GameState, CompanionEntity, WeaponStats } from '../types';
+import { GameState, CompanionEntity, WeaponStats, Skill } from '../types';
 import { checkCollision, tryMove, checkAttackHit } from './Physics';
 import { generateEnemy } from '../lib/EnemyGenerator';
 import { generateRandomItem, generateBossDrop, generateMaterial } from '../lib/ItemGenerator';
 import { generateDungeonMap, generateWorldChunk, generateTownMap, generateMineMap } from '../world/MapGenerator';
+import { SKILL_DATABASE } from '../entities/Player';
 
 export const updateGame = (
   state: GameState, 
@@ -19,7 +20,7 @@ export const updateGame = (
   const speedMult = settings.gameSpeed;
   const diffConfig = DIFFICULTY_CONFIG[settings.difficulty];
 
-  // 1. プレイヤー移動 (既存のまま)
+  // 1. プレイヤー移動
   let dx = 0, dy = 0; const pSpeed = player.speed * speedMult;
   if (input.keys['w'] || input.keys['ArrowUp']) dy = -pSpeed;
   if (input.keys['s'] || input.keys['ArrowDown']) dy = pSpeed;
@@ -33,7 +34,107 @@ export const updateGame = (
     player.isAttacking = false;
   }
 
-  // 2. 攻撃・採掘処理
+  // --- 共通攻撃処理関数 ---
+  const executeAttack = (weapon: WeaponStats, dmgMult: number = 1.0, isSkill: boolean = false) => {
+    const worldMx = input.mouse.x + state.camera.x;
+    const worldMy = input.mouse.y + state.camera.y;
+    const angle = Math.atan2(worldMy - (player.y + player.height/2), worldMx - (player.x + player.width/2));
+    const rangePx = weapon.range * TILE_SIZE;
+    
+    player.isAttacking = true; 
+    player.attackStartTime = now; 
+    player.attackDuration = isSkill ? 300 : 200; 
+    player.attackDirection = angle;
+    
+    state.particles.push({ 
+      x: player.x + player.width/2 + Math.cos(angle)*rangePx*0.5, 
+      y: player.y + player.height/2 + Math.sin(angle)*rangePx*0.5, 
+      vx: 0, vy: 0, life: 0.2, color: isSkill ? '#ffeb3b' : '#fff', size: isSkill ? 8 : 5 
+    });
+
+    // 敵への攻撃
+    enemies.forEach(enemy => {
+      if (enemy.dead) return;
+      if (checkAttackHit(player, enemy, weapon.shape, rangePx, weapon.shape==='line'?weapon.width*TILE_SIZE:weapon.width, angle)) {
+        const rawDmg = ((weapon.slash||0) + (weapon.blunt||0) + (weapon.pierce||0) + player.attack) * (1 + player.level * 0.1);
+        const damage = Math.max(1, (rawDmg * dmgMult) - enemy.defense);
+        enemy.hp -= damage;
+        state.particles.push({x: enemy.x, y: enemy.y, vx:0, vy:0, life:0.3, color: 'red', size: 5});
+        if (enemy.hp <= 0) {
+            enemy.dead = true;
+            if (Math.random() < (enemy.dropRate || 0.1)) {
+              state.droppedItems.push({ id: crypto.randomUUID(), item: generateRandomItem(player.level), x: enemy.x, y: enemy.y, life: 1000 });
+            }
+            player.xp += enemy.level * 10; player.gold += enemy.level * 5;
+        }
+      }
+    });
+
+    // 資源への採掘判定
+    if (resources) {
+      resources.forEach(res => {
+        if (res.dead) return;
+        const d = Math.sqrt((res.x+res.width/2 - (player.x+player.width/2))**2 + (res.y+res.height/2 - (player.y+player.height/2))**2);
+        if (d < rangePx) {
+            let miningPower = 1;
+            if (weapon.category === 'Pickaxe' && (res.resourceType === 'rock' || res.resourceType.includes('ore'))) miningPower = 5;
+            if (weapon.category === 'Axe' && res.resourceType === 'tree') miningPower = 5;
+            
+            res.hp -= (player.attack + (weapon.miningPower || 0)) * miningPower * dmgMult;
+            state.particles.push({x: res.x+res.width/2, y: res.y+res.height/2, vx:(Math.random()-0.5)*2, vy:(Math.random()-0.5)*2, life:0.3, color: '#ccc', size: 3});
+
+            if (res.hp <= 0) {
+              res.dead = true;
+              let matType: any = 'wood';
+              if (res.resourceType === 'rock') matType = 'stone';
+              if (res.resourceType === 'iron_ore') matType = 'iron';
+              if (res.resourceType === 'gold_ore') matType = 'gold';
+              
+              const count = 1 + Math.floor(Math.random() * 3);
+              for(let i=0; i<count; i++) {
+                state.droppedItems.push({
+                  id: crypto.randomUUID(),
+                  item: generateMaterial(matType),
+                  x: res.x + (Math.random()-0.5)*20, y: res.y + (Math.random()-0.5)*20, life: 2000
+                });
+              }
+            }
+        }
+      });
+    }
+  };
+
+  // --- スキル発動処理 (1-5キー) ---
+  for (let i = 0; i < 5; i++) {
+    if (input.keys[(i + 1).toString()]) {
+      const skillId = player.hotbar[i];
+      if (skillId) {
+        const skill = SKILL_DATABASE[skillId];
+        const pSkill = player.skills.find(s => s.skillId === skillId);
+        
+        if (skill && pSkill && player.mp >= skill.mpCost && (now - pSkill.lastUsed) >= skill.cooldown * 1000) {
+          player.mp -= skill.mpCost;
+          pSkill.lastUsed = now;
+
+          if (skill.target === 'self') {
+            if (skill.id === 'heal') {
+              player.hp = Math.min(player.maxHp, player.hp + 50);
+              state.particles.push({x: player.x, y: player.y, vx:0, vy:-1, life:1.0, color: 'green', size: 10});
+            } else if (skill.id === 'warcry' || skill.id === 'bless') {
+               state.particles.push({x: player.x, y: player.y, vx:0, vy:-1, life:1.0, color: 'yellow', size: 10});
+            }
+          } else {
+            const weapon = player.equipment.mainHand?.weaponStats || { category: 'Fist', range: 1, width: 1, shape: 'arc', attackSpeed: 1, knockback: 1, hitRate: 1, critRate: 0, slash: 0, blunt: 0, pierce: 0 };
+            const skillWeapon = { ...weapon, range: skill.range || weapon.range, width: weapon.width * 1.5 };
+            executeAttack(skillWeapon as WeaponStats, skill.damageMultiplier || 1.0, true);
+          }
+        }
+      }
+      input.keys[(i + 1).toString()] = false;
+    }
+  }
+
+  // --- 2. 通常攻撃処理 ---
   if (input.mouse.leftDown && mode === 'combat') {
     const weapon = player.equipment.mainHand?.weaponStats || {
       category: 'Fist', range: 1, width: 0.8, shape: 'line', attackSpeed: 0.5, knockback: 0.5, hitRate: 0.9, critRate: 0.1, slash: 0, blunt: 5, pierce: 0
@@ -41,69 +142,11 @@ export const updateGame = (
 
     if (!player.lastAttackTime || now - player.lastAttackTime > weapon.attackSpeed * 1000 / speedMult) {
       player.lastAttackTime = now;
-      const worldMx = input.mouse.x + state.camera.x;
-      const worldMy = input.mouse.y + state.camera.y;
-      const angle = Math.atan2(worldMy - (player.y + player.height/2), worldMx - (player.x + player.width/2));
-      const rangePx = weapon.range * TILE_SIZE;
-      
-      player.isAttacking = true; player.attackStartTime = now; player.attackDuration = 200; player.attackDirection = angle;
-      state.particles.push({ x: player.x + player.width/2 + Math.cos(angle)*rangePx*0.5, y: player.y + player.height/2 + Math.sin(angle)*rangePx*0.5, vx: 0, vy: 0, life: 0.2, color: '#fff', size: 5 });
-
-      // 敵への攻撃
-      enemies.forEach(enemy => {
-        if (enemy.dead) return;
-        if (checkAttackHit(player, enemy, weapon.shape, rangePx, weapon.shape==='line'?weapon.width*TILE_SIZE:weapon.width, angle)) {
-          const rawDmg = ((weapon.slash||0) + (weapon.blunt||0) + (weapon.pierce||0) + player.attack) * (1 + player.level * 0.1);
-          const damage = Math.max(1, rawDmg - enemy.defense);
-          enemy.hp -= damage;
-          state.particles.push({x: enemy.x, y: enemy.y, vx:0, vy:0, life:0.3, color: 'red', size: 5});
-          if (enemy.hp <= 0) {
-             enemy.dead = true;
-             // ドロップ
-             if (Math.random() < (enemy.dropRate || 0.1)) {
-                state.droppedItems.push({ id: crypto.randomUUID(), item: generateRandomItem(player.level), x: enemy.x, y: enemy.y, life: 1000 });
-             }
-             player.xp += enemy.level * 10; player.gold += enemy.level * 5;
-          }
-        }
-      });
-
-      // 資源への採掘判定
-      if (resources) {
-        resources.forEach(res => {
-          if (res.dead) return;
-          const d = Math.sqrt((res.x+res.width/2 - (player.x+player.width/2))**2 + (res.y+res.height/2 - (player.y+player.height/2))**2);
-          if (d < rangePx) {
-             let miningPower = 1;
-             if (weapon.category === 'Pickaxe' && (res.resourceType === 'rock' || res.resourceType.includes('ore'))) miningPower = 5;
-             if (weapon.category === 'Axe' && res.resourceType === 'tree') miningPower = 5;
-             
-             res.hp -= (player.attack + (weapon.miningPower || 0)) * miningPower;
-             state.particles.push({x: res.x+res.width/2, y: res.y+res.height/2, vx:(Math.random()-0.5)*2, vy:(Math.random()-0.5)*2, life:0.3, color: '#ccc', size: 3});
-
-             if (res.hp <= 0) {
-               res.dead = true;
-               let matType: any = 'wood';
-               if (res.resourceType === 'rock') matType = 'stone';
-               if (res.resourceType === 'iron_ore') matType = 'iron';
-               if (res.resourceType === 'gold_ore') matType = 'gold';
-               
-               const count = 1 + Math.floor(Math.random() * 3);
-               for(let i=0; i<count; i++) {
-                 state.droppedItems.push({
-                   id: crypto.randomUUID(),
-                   item: generateMaterial(matType),
-                   x: res.x + (Math.random()-0.5)*20, y: res.y + (Math.random()-0.5)*20, life: 2000
-                 });
-               }
-             }
-          }
-        });
-      }
+      executeAttack(weapon);
     }
   }
 
-  // 3. マップ遷移 (Mine追加)
+  // ... (以降、マップ遷移やNPCなどは既存ロジックを維持) ...
   const tx = Math.floor((player.x + player.width/2) / TILE_SIZE);
   const ty = Math.floor((player.y + player.height/2) / TILE_SIZE);
   if (tx >= 0 && tx < MAP_WIDTH && ty >= 0 && ty < MAP_HEIGHT) {
@@ -122,7 +165,6 @@ export const updateGame = (
         state.map = mine.map; state.resources = mine.resources; state.enemies = [];
         player.x = mine.spawnPoint.x; player.y = mine.spawnPoint.y;
       }
-      // ... 他の遷移
       else if (tile.type === 'town_entrance') {
         state.location = { type: 'town', level: 0, townId: 'town', worldX:0, worldY:0 };
         const town = generateTownMap(player.level);
@@ -135,10 +177,23 @@ export const updateGame = (
         state.map = world.map; state.resources = world.resources;
         player.x = world.spawnPoint.x; player.y = world.spawnPoint.y;
       }
+      else if (tile.type === 'dungeon_entrance' && tile.meta) {
+        state.location = { ...state.location, type: 'dungeon', level: 1, maxDepth: tile.meta.maxDepth, dungeonId: `dungeon_${Date.now()}` };
+        const dungeon = generateDungeonMap(1, tile.meta.maxDepth);
+        state.map = dungeon.map; state.chests = dungeon.chests; state.npcs = []; state.droppedItems = []; state.enemies = [];
+        state.player.x = dungeon.spawnPoint.x; state.player.y = dungeon.spawnPoint.y;
+        party.forEach(c => { c.x = dungeon.spawnPoint.x; c.y = dungeon.spawnPoint.y; });
+      }
+      else if (tile.type === 'stairs_down' && location.type === 'dungeon') {
+        const next = location.level + 1;
+        state.location.level = next;
+        const dungeon = generateDungeonMap(next, 5);
+        state.map = dungeon.map; state.chests = dungeon.chests; state.npcs = []; state.droppedItems = []; state.enemies = [];
+        player.x = dungeon.spawnPoint.x; player.y = dungeon.spawnPoint.y;
+      }
     }
   }
 
-  // 4. NPCインタラクション (Crafting)
   if (location.type === 'town' && input.mouse.leftDown) {
     const mx = input.mouse.x + state.camera.x;
     const my = input.mouse.y + state.camera.y;
@@ -151,13 +206,9 @@ export const updateGame = (
     }
   }
 
-  // Item Pickup
   state.droppedItems = state.droppedItems.filter(drop => {
     const d = Math.sqrt((player.x - drop.x)**2 + (player.y - drop.y)**2);
-    if (d < 40) {
-      player.inventory.push({ ...drop.item, instanceId: crypto.randomUUID() });
-      return false;
-    }
+    if (d < 40) { player.inventory.push({ ...drop.item, instanceId: crypto.randomUUID() }); return false; }
     return true;
   });
 
@@ -166,32 +217,8 @@ export const updateGame = (
   state.enemies = state.enemies.filter(e => !e.dead);
 
   if (state.location.type === 'world' && state.enemies.length < 5 && Math.random() < GAME_CONFIG.ENEMY_SPAWN_RATE) {
-    spawnWorldEnemies(state);
-  }
-};
-
-const spawnWorldEnemies = (state: GameState) => {
-  const { MAP_WIDTH, MAP_HEIGHT, TILE_SIZE } = GAME_CONFIG;
-  let ex, ey, attempts = 0;
-  do {
-    ex = Math.random() * (MAP_WIDTH * TILE_SIZE);
-    ey = Math.random() * (MAP_HEIGHT * TILE_SIZE);
-    attempts++;
-  } while ((state.map[Math.floor(ey/TILE_SIZE)]?.[Math.floor(ex/TILE_SIZE)]?.solid ?? true) && attempts < 50);
-  if (attempts < 50) state.enemies.push(generateEnemy(ex, ey, state.player.level));
-};
-
-const spawnDungeonEnemies = (state: GameState, level: number) => {
-  const { MAP_WIDTH, MAP_HEIGHT, TILE_SIZE } = GAME_CONFIG;
-  const count = 5 + level;
-  for(let i=0; i<count; i++) {
-     let ex, ey;
-     let attempts = 0;
-     do {
-       ex = Math.random() * (MAP_WIDTH * TILE_SIZE);
-       ey = Math.random() * (MAP_HEIGHT * TILE_SIZE);
-       attempts++;
-     } while((state.map[Math.floor(ey/TILE_SIZE)]?.[Math.floor(ex/TILE_SIZE)]?.solid ?? true) && attempts < 100);
-     if (attempts < 100) state.enemies.push(generateEnemy(ex, ey, state.player.level + level));
+    const ex = Math.random() * (MAP_WIDTH * TILE_SIZE);
+    const ey = Math.random() * (MAP_HEIGHT * TILE_SIZE);
+    if(!state.map[Math.floor(ey/TILE_SIZE)]?.[Math.floor(ex/TILE_SIZE)]?.solid) state.enemies.push(generateEnemy(ex, ey, player.level));
   }
 };
