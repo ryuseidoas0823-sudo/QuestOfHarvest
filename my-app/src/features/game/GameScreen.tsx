@@ -20,10 +20,11 @@ import { HUD } from '../../components/UI/HUD';
 
 interface GameScreenProps {
   user: User | null;
-  initialData?: any; // ロードデータを受け取る
+  initialData?: any; // ロードデータ
+  initialSettings?: GameSettings; // Appから渡される設定
 }
 
-export const GameScreen: React.FC<GameScreenProps> = ({ user, initialData }) => {
+export const GameScreen: React.FC<GameScreenProps> = ({ user, initialData, initialSettings }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { keys, mouse, handlers } = useGameInput();
 
@@ -31,14 +32,17 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, initialData }) => 
   const [showSettings, setShowSettings] = useState(false);
   const [shopNPC, setShopNPC] = useState<NPCEntity | null>(null);
   
-  // 初期化完了フラグ（これがtrueになるまで描画しない）
+  // 初期化完了フラグ
   const [isInitialized, setIsInitialized] = useState(false);
 
-  const [settings, setSettings] = useState<GameSettings>({
-    masterVolume: 0.5,
-    gameSpeed: 1.0,
-    difficulty: 'normal'
-  });
+  // 設定: initialData(ロードデータ) > initialSettings(タイトル画面の設定) > デフォルト
+  const [settings, setSettings] = useState<GameSettings>(
+    initialData?.settings || initialSettings || {
+      masterVolume: 0.5,
+      gameSpeed: 1.0,
+      difficulty: 'normal'
+    }
+  );
 
   const [uiState, setUiState] = useState({
     hp: 100,
@@ -50,7 +54,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, initialData }) => 
     gold: 0
   });
 
-  // GameStateは初期値nullで開始
   const gameState = useRef<GameState | null>(null);
 
   // --- 初期化ロジック ---
@@ -58,6 +61,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, initialData }) => 
     console.log("GameScreen: Initializing world...");
     
     try {
+      const { VIEWPORT_WIDTH, VIEWPORT_HEIGHT, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } = GAME_CONFIG;
+
       // 1. ベースのワールド生成
       const world = generateWorldMap(0);
       let newPlayer = createPlayer();
@@ -68,17 +73,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, initialData }) => 
       // 2. ロードデータがある場合は上書き
       if (initialData && initialData.player) {
         console.log("GameScreen: Loading save data...");
-        // プレイヤー情報の復元
         newPlayer = { ...newPlayer, ...initialData.player };
-        
-        // 設定の復元
-        if (initialData.settings) {
-          setSettings(initialData.settings);
-        }
-        
-        // 注: マップデータ自体は容量が大きいため通常セーブしません。
-        // ここでは「レベルや所持品を引き継いで、新しいマップ(拠点)から再開」する仕様とします。
-        // もしマップ位置も復元したい場合は、generateWorldMapのシード固定などが必要です。
+        // 位置も復元（マップ再生成しているので地形と整合性が取れないリスクはあるが、今回は許容）
       } else {
         console.log("GameScreen: Starting new game setup...");
         // 初期装備
@@ -90,36 +86,39 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, initialData }) => 
       }
 
       // 3. 敵の生成
-      const currentDiff = initialData?.settings?.difficulty || settings.difficulty;
-      const diffConfig = DIFFICULTY_CONFIG[currentDiff];
+      const diffConfig = DIFFICULTY_CONFIG[settings.difficulty];
       const enemies = [];
       for (let i = 0; i < 10; i++) {
-        const ex = Math.random() * (GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE);
-        const ey = Math.random() * (GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE);
+        const ex = Math.random() * (MAP_WIDTH * TILE_SIZE);
+        const ey = Math.random() * (MAP_HEIGHT * TILE_SIZE);
         const e = generateEnemy(ex, ey, 1);
         e.maxHp *= diffConfig.hpMult; e.hp = e.maxHp;
         enemies.push(e);
       }
 
-      // 4. GameState構築
+      // 4. カメラ初期位置の計算（重要: これがズレていると真っ暗になる）
+      const cx = Math.max(0, Math.min(newPlayer.x - VIEWPORT_WIDTH / 2, MAP_WIDTH * TILE_SIZE - VIEWPORT_WIDTH));
+      const cy = Math.max(0, Math.min(newPlayer.y - VIEWPORT_HEIGHT / 2, MAP_HEIGHT * TILE_SIZE - VIEWPORT_HEIGHT));
+
+      // 5. GameState構築
       gameState.current = {
         map: world.map,
         chests: world.chests,
         droppedItems: [],
         player: newPlayer,
-        party: initialData?.party || [], // 仲間も復元
+        party: initialData?.party || [],
         npcs: world.npcs,
         enemies: enemies,
         particles: [],
-        camera: { x: 0, y: 0 }, // 後でプレイヤー位置に合わせる
+        camera: { x: cx, y: cy }, // 計算したカメラ位置をセット
         mode: 'combat',
-        settings: initialData?.settings || settings,
+        settings: settings,
         location: { type: 'world', level: 0, mapsSinceLastTown: 0 },
         activeShop: null
       };
 
       console.log("GameScreen: Initialization complete.", gameState.current);
-      setIsInitialized(true); // 準備完了
+      setIsInitialized(true);
 
       if (canvasRef.current) canvasRef.current.focus();
 
@@ -127,7 +126,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, initialData }) => 
       console.error("GameScreen Initialization Error:", err);
       alert("Error initializing game. See console for details.");
     }
-  }, []); // 初回のみ実行
+  }, []); // 初回のみ
 
   // 設定変更の反映
   useEffect(() => {
@@ -150,7 +149,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, initialData }) => 
 
   // ゲームループ
   useEffect(() => {
-    if (!isInitialized) return; // 初期化前は動かさない
+    if (!isInitialized) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -161,17 +160,14 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, initialData }) => 
     let animationFrameId: number;
 
     const loop = () => {
-      // 安全策: gameStateが消えていたら中断
       if (!gameState.current) return;
 
       if (!isPaused) {
         updateGame(gameState.current, { keys: keys.current, mouse: mouse.current }, isPaused);
       }
       
-      // 描画
       renderGame(ctx, gameState.current, { mouse: mouse.current });
 
-      // UI同期 (頻度調整)
       if (Math.random() > 0.9) {
         const p = gameState.current.player;
         const loc = gameState.current.location;
@@ -191,9 +187,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, initialData }) => 
     
     loop();
     return () => cancelAnimationFrame(animationFrameId);
-  }, [isInitialized, isPaused]); // 初期化完了後にループ開始
+  }, [isInitialized, isPaused]);
 
-  // --- ショップ操作 ---
+  // --- 以下、イベントハンドラ等は変更なし ---
   const handleBuy = (item: Item) => {
     if (!gameState.current) return;
     const p = gameState.current.player;
@@ -283,7 +279,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, initialData }) => 
     }
   };
 
-  // まだ初期化中ならローディング表示
   if (!isInitialized) {
     return (
       <div className="flex items-center justify-center w-full h-full bg-black text-white">
@@ -304,13 +299,11 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, initialData }) => 
         onSave={handleSave}
       />
       
-      {/* 所持金表示 */}
       <div className="absolute top-24 left-4 flex items-center gap-2 text-[#ffd700] font-serif text-lg pointer-events-none select-none z-10 bg-black/50 px-3 py-1 rounded border border-[#5d4037]">
         <Coins size={20} />
         <span>{uiState.gold} G</span>
       </div>
 
-      {/* 設定ボタン */}
       <div className="absolute top-4 right-4 z-20">
         <button 
           onClick={() => { setIsPaused(true); setShowSettings(true); }}
@@ -320,7 +313,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, initialData }) => 
         </button>
       </div>
 
-      {/* ショップモーダル */}
       {shopNPC && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80">
           <div className="bg-[#2d1b15] border-2 border-[#5d4037] p-6 rounded-lg w-[600px] text-[#d4af37] shadow-2xl max-h-[80vh] overflow-y-auto">
@@ -335,7 +327,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, initialData }) => 
               <button onClick={closeShop} className="hover:text-white"><X /></button>
             </div>
 
-            {/* 各ショップUIの中身 (前回と同じため省略なしで記述) */}
             {shopNPC.role === 'inn' && (
               <div className="text-center">
                 <p className="mb-4 text-gray-300">"Rest your weary bones, traveler."</p>
@@ -400,7 +391,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, initialData }) => 
         </div>
       )}
 
-      {/* 設定モーダル */}
       {showSettings && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80">
           <div className="bg-[#2d1b15] border-2 border-[#5d4037] p-8 rounded-lg w-96 text-[#d4af37] shadow-2xl">
@@ -409,6 +399,10 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, initialData }) => 
               <button onClick={() => setShowSettings(false)} className="hover:text-white"><X /></button>
             </div>
             <div className="space-y-6">
+              <div>
+                <label className="block mb-2 font-bold">Volume</label>
+                <input type="range" min="0" max="1" step="0.1" value={settings.masterVolume} onChange={(e) => setSettings({...settings, masterVolume: parseFloat(e.target.value)})} className="w-full accent-[#d4af37]" />
+              </div>
               <div>
                 <label className="block mb-2 font-bold">Game Speed: {settings.gameSpeed}x</label>
                 <div className="flex gap-2">
@@ -431,7 +425,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, initialData }) => 
         </div>
       )}
 
-      {/* Canvas */}
       <div className="relative shadow-2xl overflow-hidden rounded-lg border-4 transition-colors duration-300 outline-none" style={{ borderColor: THEME.colors.uiBorder, width: GAME_CONFIG.VIEWPORT_WIDTH, height: GAME_CONFIG.VIEWPORT_HEIGHT }}>
         <canvas ref={canvasRef} width={GAME_CONFIG.VIEWPORT_WIDTH} height={GAME_CONFIG.VIEWPORT_HEIGHT} className="block bg-black cursor-crosshair outline-none" tabIndex={0} {...handlers} onClick={(e) => { handlers.onMouseDown(e); e.currentTarget.focus(); }} />
       </div>
