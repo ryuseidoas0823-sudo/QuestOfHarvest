@@ -53,7 +53,6 @@ export const updateGame = (
       enemies.forEach(enemy => {
         if (enemy.dead) return;
         if (checkAttackHit(player, enemy, weapon.shape, rangePx, weapon.shape==='line'?weapon.width*TILE_SIZE:weapon.width, angle)) {
-          // ... (ダメージ計算既存ロジック)
           const rawDmg = ((weapon.slash||0) + (weapon.blunt||0) + (weapon.pierce||0) + player.attack) * (1 + player.level * 0.1);
           const damage = Math.max(1, rawDmg - enemy.defense);
           enemy.hp -= damage;
@@ -73,27 +72,22 @@ export const updateGame = (
       if (resources) {
         resources.forEach(res => {
           if (res.dead) return;
-          // 簡易当たり判定
           const d = Math.sqrt((res.x+res.width/2 - (player.x+player.width/2))**2 + (res.y+res.height/2 - (player.y+player.height/2))**2);
-          if (d < rangePx) { // 角度判定は省略（全周囲採掘可）
-             // 採掘ツールボーナス
+          if (d < rangePx) {
              let miningPower = 1;
              if (weapon.category === 'Pickaxe' && (res.resourceType === 'rock' || res.resourceType.includes('ore'))) miningPower = 5;
              if (weapon.category === 'Axe' && res.resourceType === 'tree') miningPower = 5;
              
-             // ダメージ
              res.hp -= (player.attack + (weapon.miningPower || 0)) * miningPower;
              state.particles.push({x: res.x+res.width/2, y: res.y+res.height/2, vx:(Math.random()-0.5)*2, vy:(Math.random()-0.5)*2, life:0.3, color: '#ccc', size: 3});
 
              if (res.hp <= 0) {
                res.dead = true;
-               // 素材ドロップ
                let matType: any = 'wood';
                if (res.resourceType === 'rock') matType = 'stone';
                if (res.resourceType === 'iron_ore') matType = 'iron';
                if (res.resourceType === 'gold_ore') matType = 'gold';
                
-               // 1〜3個ドロップ
                const count = 1 + Math.floor(Math.random() * 3);
                for(let i=0; i<count; i++) {
                  state.droppedItems.push({
@@ -128,7 +122,7 @@ export const updateGame = (
         state.map = mine.map; state.resources = mine.resources; state.enemies = [];
         player.x = mine.spawnPoint.x; player.y = mine.spawnPoint.y;
       }
-      // ... 他の遷移 (town, dungeon, world) は既存ロジックを維持
+      // ... 他の遷移
       else if (tile.type === 'town_entrance') {
         state.location = { type: 'town', level: 0, townId: 'town', worldX:0, worldY:0 };
         const town = generateTownMap(player.level);
@@ -157,7 +151,6 @@ export const updateGame = (
     }
   }
 
-  // ... (敵AI、アイテム取得などは既存ロジックを維持)
   // Item Pickup
   state.droppedItems = state.droppedItems.filter(drop => {
     const d = Math.sqrt((player.x - drop.x)**2 + (player.y - drop.y)**2);
@@ -167,5 +160,38 @@ export const updateGame = (
     }
     return true;
   });
-  // ...
+
+  state.particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life -= 0.05; });
+  state.particles = state.particles.filter(p => p.life > 0);
+  state.enemies = state.enemies.filter(e => !e.dead);
+
+  if (state.location.type === 'world' && state.enemies.length < 5 && Math.random() < GAME_CONFIG.ENEMY_SPAWN_RATE) {
+    spawnWorldEnemies(state);
+  }
+};
+
+const spawnWorldEnemies = (state: GameState) => {
+  const { MAP_WIDTH, MAP_HEIGHT, TILE_SIZE } = GAME_CONFIG;
+  let ex, ey, attempts = 0;
+  do {
+    ex = Math.random() * (MAP_WIDTH * TILE_SIZE);
+    ey = Math.random() * (MAP_HEIGHT * TILE_SIZE);
+    attempts++;
+  } while ((state.map[Math.floor(ey/TILE_SIZE)]?.[Math.floor(ex/TILE_SIZE)]?.solid ?? true) && attempts < 50);
+  if (attempts < 50) state.enemies.push(generateEnemy(ex, ey, state.player.level));
+};
+
+const spawnDungeonEnemies = (state: GameState, level: number) => {
+  const { MAP_WIDTH, MAP_HEIGHT, TILE_SIZE } = GAME_CONFIG;
+  const count = 5 + level;
+  for(let i=0; i<count; i++) {
+     let ex, ey;
+     let attempts = 0;
+     do {
+       ex = Math.random() * (MAP_WIDTH * TILE_SIZE);
+       ey = Math.random() * (MAP_HEIGHT * TILE_SIZE);
+       attempts++;
+     } while((state.map[Math.floor(ey/TILE_SIZE)]?.[Math.floor(ex/TILE_SIZE)]?.solid ?? true) && attempts < 100);
+     if (attempts < 100) state.enemies.push(generateEnemy(ex, ey, state.player.level + level));
+  }
 };
