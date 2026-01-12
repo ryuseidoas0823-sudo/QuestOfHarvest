@@ -235,9 +235,10 @@ export const renderGame = (
   // マップデータが存在しない場合はLoading表示をして処理を中断（クラッシュ防止）
   if (!state.map || state.map.length === 0) {
     ctx.fillStyle = '#fff';
-    ctx.font = '24px serif';
+    ctx.font = '30px serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Generating World...', width / 2, height / 2);
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Now Loading...', width / 2, height / 2);
     return;
   }
 
