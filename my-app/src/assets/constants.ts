@@ -18,7 +18,7 @@ export const GAME_CONFIG = {
   WORLD_SIZE_H: 5,
 
   // ゲームプレイ設定
-  PLAYER_SPEED: 4,
+  PLAYER_SPEED: 2, // 4 -> 2 に変更（スピード半減）
   ENEMY_SPAWN_RATE: 0.02,
   DAY_NIGHT_CYCLE: 60000 * 5, // 5分
 };
