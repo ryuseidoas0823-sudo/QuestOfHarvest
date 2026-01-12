@@ -26,158 +26,221 @@ const drawCharacter = (
   // 基本形状の描画関数
   const drawBody = (color: string) => {
     ctx.fillStyle = color;
-    // 体 (少し丸みを帯びた矩形)
     ctx.beginPath();
     ctx.roundRect(x + w * 0.15, y + h * 0.3, w * 0.7, h * 0.6, 4);
     ctx.fill();
   };
 
   const drawHead = (color: string, skinColor: string = '#f8d9bd') => {
-    // 顔（肌）
     ctx.fillStyle = skinColor;
     ctx.beginPath();
     ctx.arc(centerX, y + h * 0.25, w * 0.35, 0, Math.PI * 2);
     ctx.fill();
-    
-    // 髪/帽子（ベース）
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(centerX, y + h * 0.22, w * 0.38, Math.PI, Math.PI * 2); // 上半分
+    ctx.arc(centerX, y + h * 0.22, w * 0.38, Math.PI, Math.PI * 2); 
     ctx.fill();
   };
 
   // エンティティタイプごとの描画分け
   if (entity.type === 'player') {
-    // 主人公: 勇者風
     const p = entity as PlayerEntity;
-    drawBody('#1a237e'); // 青い服
-    drawHead('#ffeb3b'); // 金髪
-    
-    // マント
+    drawBody('#1a237e');
+    drawHead('#ffeb3b');
     ctx.fillStyle = '#b71c1c';
     ctx.fillRect(x + w * 0.2, y + h * 0.4, w * 0.6, h * 0.4);
-    
-    // 剣
-    ctx.fillStyle = '#e0e0e0'; // 刃
+    ctx.fillStyle = '#e0e0e0';
     ctx.fillRect(x + w * 0.8, y + h * 0.2, 4, 16);
-    ctx.fillStyle = '#8d6e63'; // 柄
+    ctx.fillStyle = '#8d6e63';
     ctx.fillRect(x + w * 0.8, y + h * 0.6, 4, 6);
     
   } else if (entity.type === 'companion') {
-    // 仲間: 職業別
     const c = entity as CompanionEntity;
-    
     if (c.job === 'Warrior') {
-      drawBody('#607d8b'); // 鎧
-      drawHead('#5d4037'); // 茶髪/兜
-      // 盾
-      ctx.fillStyle = '#455a64';
-      ctx.beginPath();
-      ctx.arc(x + w * 0.2, y + h * 0.6, 8, 0, Math.PI * 2);
-      ctx.fill();
+      drawBody('#607d8b'); drawHead('#5d4037');
+      ctx.fillStyle = '#455a64'; ctx.beginPath(); ctx.arc(x + w * 0.2, y + h * 0.6, 8, 0, Math.PI * 2); ctx.fill();
     } else if (c.job === 'Mage') {
-      drawBody('#4a148c'); // 紫のローブ
-      drawHead('#4a148c'); // フード
-      // 杖
-      ctx.strokeStyle = '#8d6e63';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(x + w * 0.8, y + h * 0.2);
-      ctx.lineTo(x + w * 0.8, y + h * 0.9);
-      ctx.stroke();
-      ctx.fillStyle = '#f44336'; // 宝石
-      ctx.beginPath();
-      ctx.arc(x + w * 0.8, y + h * 0.2, 3, 0, Math.PI*2);
-      ctx.fill();
+      drawBody('#4a148c'); drawHead('#4a148c');
+      ctx.strokeStyle = '#8d6e63'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + w * 0.8, y + h * 0.2); ctx.lineTo(x + w * 0.8, y + h * 0.9); ctx.stroke();
     } else if (c.job === 'Archer') {
-      drawBody('#33691e'); // 緑の服
-      drawHead('#f57f17'); // 帽子
-      // 弓
-      ctx.strokeStyle = '#8d6e63';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(x + w * 0.1, y + h * 0.5, 10, -Math.PI/2, Math.PI/2);
-      ctx.stroke();
+      drawBody('#33691e'); drawHead('#f57f17');
+      ctx.strokeStyle = '#8d6e63'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x + w * 0.1, y + h * 0.5, 10, -Math.PI/2, Math.PI/2); ctx.stroke();
     } else if (c.job === 'Cleric') {
-      drawBody('#e0e0e0'); // 白衣
-      drawHead('#90caf9'); // ベール
-      // 十字架
-      ctx.fillStyle = '#ffd700';
-      ctx.fillRect(x + w * 0.4, y + h * 0.4, 8, 2);
-      ctx.fillRect(x + w * 0.5 - 1, y + h * 0.35, 2, 8);
+      drawBody('#e0e0e0'); drawHead('#90caf9');
+      ctx.fillStyle = '#ffd700'; ctx.fillRect(x + w * 0.4, y + h * 0.4, 8, 2); ctx.fillRect(x + w * 0.5 - 1, y + h * 0.35, 2, 8);
     }
 
   } else if (entity.type === 'npc') {
-    // 村人: 役割別
     const npc = entity as NPCEntity;
-    const roleColor = {
-      inn: '#795548',    // 宿屋 (茶)
-      weapon: '#424242', // 武器屋 (グレー)
-      item: '#2e7d32',   // 道具屋 (緑)
-      revive: '#c62828', // 蘇生屋 (赤)
-      recruit: '#0277bd', // 紹介屋 (青)
-      villager: '#9e9e9e'
-    }[npc.role] || '#9e9e9e';
-
-    drawBody(roleColor);
-    drawHead('#5d4037'); // 共通の髪色
-
-    // 役割アイコン
-    ctx.fillStyle = '#fff';
-    ctx.font = '10px sans-serif';
-    ctx.textAlign = 'center';
+    const roleColor = { inn: '#795548', weapon: '#424242', item: '#2e7d32', revive: '#c62828', recruit: '#0277bd', villager: '#9e9e9e' }[npc.role] || '#9e9e9e';
+    drawBody(roleColor); drawHead('#5d4037');
+    ctx.fillStyle = '#fff'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
     let icon = '';
-    if (npc.role === 'inn') icon = 'Zzz';
-    if (npc.role === 'weapon') icon = '⚔️';
-    if (npc.role === 'item') icon = '💊';
-    if (npc.role === 'revive') icon = '✚';
-    if (npc.role === 'recruit') icon = '🤝';
-    
-    if (icon) {
-      ctx.fillText(icon, centerX, y - 5);
-    }
+    if (npc.role === 'inn') icon = 'Zzz'; if (npc.role === 'weapon') icon = '⚔️'; if (npc.role === 'item') icon = '💊'; if (npc.role === 'revive') icon = '✚'; if (npc.role === 'recruit') icon = '🤝';
+    if (icon) ctx.fillText(icon, centerX, y - 5);
 
   } else if (entity.type === 'enemy' || entity.type === 'boss') {
-    // 敵
     const e = entity as EnemyEntity;
-    const color = e.type === 'boss' ? THEME.colors.boss : e.color;
-    
-    ctx.fillStyle = color;
-    
+    ctx.fillStyle = e.color;
+
+    // --- 種族ごとの描画 ---
+    switch (e.race) {
+      case 'Slime':
+        // スライム: 滴型
+        ctx.beginPath();
+        ctx.moveTo(x + w*0.5, y + h*0.2);
+        ctx.bezierCurveTo(x + w, y + h*0.5, x + w, y + h, x + w*0.5, y + h);
+        ctx.bezierCurveTo(x, y + h, x, y + h*0.5, x + w*0.5, y + h*0.2);
+        ctx.fill();
+        // 目
+        ctx.fillStyle = 'white';
+        ctx.beginPath(); ctx.arc(x + w*0.35, y + h*0.6, w*0.1, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x + w*0.65, y + h*0.6, w*0.1, 0, Math.PI*2); ctx.fill();
+        break;
+
+      case 'Goblin':
+        // ゴブリン: 小鬼、耳が長い
+        ctx.fillRect(x + w*0.2, y + h*0.4, w*0.6, h*0.5); // 体
+        ctx.beginPath(); ctx.arc(centerX, y + h*0.3, w*0.3, 0, Math.PI*2); ctx.fill(); // 頭
+        // 耳
+        ctx.beginPath(); ctx.moveTo(x + w*0.2, y + h*0.3); ctx.lineTo(x, y + h*0.1); ctx.lineTo(x + w*0.2, y + h*0.2); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(x + w*0.8, y + h*0.3); ctx.lineTo(x + w, y + h*0.1); ctx.lineTo(x + w*0.8, y + h*0.2); ctx.fill();
+        break;
+
+      case 'Skeleton':
+        // スケルトン: 細身、骨
+        ctx.fillStyle = '#eee'; // 骨色
+        ctx.fillRect(centerX - 2, y + h*0.4, 4, h*0.4); // 背骨
+        ctx.fillRect(x + w*0.2, y + h*0.45, w*0.6, 2); // 肋骨
+        ctx.fillRect(x + w*0.2, y + h*0.55, w*0.6, 2);
+        ctx.beginPath(); ctx.arc(centerX, y + h*0.25, w*0.25, 0, Math.PI*2); ctx.fill(); // 頭
+        // 黒い目
+        ctx.fillStyle = 'black';
+        ctx.beginPath(); ctx.arc(x + w*0.4, y + h*0.25, 2, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x + w*0.6, y + h*0.25, 2, 0, Math.PI*2); ctx.fill();
+        break;
+
+      case 'Wolf':
+        // ウルフ: 四足（横向き）
+        ctx.beginPath();
+        ctx.ellipse(centerX, y + h*0.6, w*0.45, h*0.3, 0, 0, Math.PI*2); // 胴体
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(x + w*0.2, y + h*0.4, w*0.2, 0, Math.PI*2); // 頭
+        ctx.fill();
+        // 耳
+        ctx.beginPath(); ctx.moveTo(x + w*0.1, y + h*0.3); ctx.lineTo(x + w*0.15, y); ctx.lineTo(x + w*0.25, y + h*0.3); ctx.fill();
+        break;
+
+      case 'Orc':
+        // オーク: 大柄、四角い
+        ctx.fillRect(x + w*0.1, y + h*0.3, w*0.8, h*0.6); // 体
+        ctx.fillRect(centerX - w*0.25, y + h*0.1, w*0.5, h*0.3); // 頭
+        // 牙
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.moveTo(centerX - 5, y + h*0.3); ctx.lineTo(centerX - 5, y + h*0.2); ctx.lineTo(centerX - 2, y + h*0.3); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(centerX + 5, y + h*0.3); ctx.lineTo(centerX + 5, y + h*0.2); ctx.lineTo(centerX + 2, y + h*0.3); ctx.fill();
+        break;
+
+      case 'Ghost':
+        // ゴースト: 下が波打つ
+        ctx.beginPath();
+        ctx.arc(centerX, y + h*0.3, w*0.4, Math.PI, 0); // 頭
+        ctx.lineTo(x + w*0.9, y + h);
+        ctx.lineTo(centerX, y + h*0.8);
+        ctx.lineTo(x + w*0.1, y + h);
+        ctx.closePath();
+        ctx.fill();
+        // 目
+        ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.arc(x + w*0.4, y + h*0.4, 3, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x + w*0.6, y + h*0.4, 3, 0, Math.PI*2); ctx.fill();
+        break;
+
+      case 'Golem':
+        // ゴーレム: ブロック状
+        ctx.fillRect(x + w*0.2, y + h*0.2, w*0.6, h*0.4); // 胸
+        ctx.fillRect(x + w*0.3, y + h*0.6, w*0.4, h*0.3); // 腰
+        ctx.fillRect(x, y + h*0.2, w*0.2, h*0.6); // 腕
+        ctx.fillRect(x + w*0.8, y + h*0.2, w*0.2, h*0.6);
+        ctx.fillStyle = '#ffff00'; // コア
+        ctx.beginPath(); ctx.arc(centerX, y + h*0.4, 4, 0, Math.PI*2); ctx.fill();
+        break;
+
+      case 'Bat':
+        // コウモリ: 翼
+        ctx.beginPath();
+        ctx.arc(centerX, y + h*0.5, w*0.2, 0, Math.PI*2); // 体
+        ctx.fill();
+        // 翼
+        ctx.beginPath();
+        ctx.moveTo(x + w*0.3, y + h*0.5);
+        ctx.quadraticCurveTo(x, y, x, y + h*0.5);
+        ctx.quadraticCurveTo(x + w*0.15, y + h*0.7, x + w*0.3, y + h*0.5);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(x + w*0.7, y + h*0.5);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + h*0.5);
+        ctx.quadraticCurveTo(x + w*0.85, y + h*0.7, x + w*0.7, y + h*0.5);
+        ctx.fill();
+        break;
+
+      case 'Spider':
+        // クモ: 8本足（省略して4本描写）
+        ctx.beginPath(); ctx.arc(centerX, y + h*0.6, w*0.3, 0, Math.PI*2); ctx.fill(); // 腹
+        ctx.beginPath(); ctx.arc(centerX, y + h*0.3, w*0.2, 0, Math.PI*2); ctx.fill(); // 頭
+        // 足
+        ctx.strokeStyle = e.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(centerX, y + h*0.4); ctx.lineTo(x, y + h*0.2); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(centerX, y + h*0.4); ctx.lineTo(x + w, y + h*0.2); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(centerX, y + h*0.5); ctx.lineTo(x, y + h*0.8); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(centerX, y + h*0.5); ctx.lineTo(x + w, y + h*0.8); ctx.stroke();
+        break;
+
+      case 'Dragon':
+        // ドラゴン: 首が長い
+        ctx.beginPath();
+        ctx.ellipse(centerX, y + h*0.7, w*0.4, h*0.25, 0, 0, Math.PI*2); // 体
+        ctx.fill();
+        // 首
+        ctx.beginPath();
+        ctx.moveTo(x + w*0.3, y + h*0.6);
+        ctx.quadraticCurveTo(x + w*0.2, y + h*0.3, x + w*0.3, y + h*0.1);
+        ctx.lineTo(x + w*0.4, y + h*0.15);
+        ctx.lineTo(x + w*0.5, y + h*0.6);
+        ctx.fill();
+        // 翼
+        ctx.beginPath();
+        ctx.moveTo(centerX, y + h*0.6);
+        ctx.lineTo(x, y + h*0.2);
+        ctx.lineTo(x + w, y + h*0.2);
+        ctx.fill();
+        break;
+        
+      default:
+        // デフォルト (四角)
+        ctx.fillRect(x, y, w, h);
+    }
+
+    // エリート/ボスの装飾
+    if (e.rank === 'Elite') {
+      ctx.strokeStyle = '#ffd700'; // 金枠
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x - 2, y - 2, w + 4, h + 4);
+    }
     if (e.type === 'boss') {
-      // ボス: トゲトゲした形状
+      // オーラ
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = e.color;
       ctx.beginPath();
-      ctx.moveTo(centerX, y);
-      ctx.lineTo(x + w, centerY);
-      ctx.lineTo(centerX, y + h);
-      ctx.lineTo(x, centerY);
+      ctx.arc(centerX, centerY, w * 0.8, 0, Math.PI * 2);
       ctx.fill();
-      // 目
-      ctx.fillStyle = '#ffeb3b';
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, w/4, 0, Math.PI*2);
-      ctx.fill();
-      ctx.fillStyle = '#000';
-      ctx.beginPath();
-      ctx.fillRect(centerX-2, centerY-10, 4, 20); // 縦長の瞳
-    } else {
-      // スライム型
-      ctx.beginPath();
-      ctx.moveTo(x, y + h);
-      ctx.quadraticCurveTo(x, y, centerX, y);
-      ctx.quadraticCurveTo(x + w, y, x + w, y + h);
-      ctx.fill();
-      // 目
-      ctx.fillStyle = '#fff';
-      ctx.beginPath();
-      ctx.arc(x + w*0.3, y + h*0.4, 4, 0, Math.PI*2);
-      ctx.arc(x + w*0.7, y + h*0.4, 4, 0, Math.PI*2);
-      ctx.fill();
-      ctx.fillStyle = '#000';
-      ctx.beginPath();
-      ctx.arc(x + w*0.3, y + h*0.4, 2, 0, Math.PI*2);
-      ctx.arc(x + w*0.7, y + h*0.4, 2, 0, Math.PI*2);
-      ctx.fill();
+      ctx.globalAlpha = 1.0;
     }
   }
 };
@@ -307,10 +370,9 @@ export const renderGame = (
     drawCharacter(ctx, e, e.x, e.y, e.width, e.height, time);
     
     // HP Bar
-    const w = e.type === 'boss' ? e.width * 1.5 : e.width;
-    const h = e.type === 'boss' ? e.height * 1.5 : e.height;
-    const drawX = e.x - (w - e.width)/2;
-    const drawY = e.y - (h - e.height)/2;
+    const w = e.width; // ボスサイズ補正は drawCharacter 内で吸収せず、エンティティのサイズ自体が変わっている前提
+    const drawX = e.x;
+    const drawY = e.y;
     
     const hpPercent = e.hp / e.maxHp;
     ctx.fillStyle = 'black';
@@ -318,21 +380,18 @@ export const renderGame = (
     ctx.fillStyle = hpPercent > 0.5 ? 'green' : 'red';
     ctx.fillRect(drawX, drawY - 10, w * hpPercent, 6);
     
-    if (e.type === 'boss') {
-      ctx.strokeStyle = '#ffd700';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(drawX, drawY - 10, w, 6);
+    // 名前表示 (ボスやエリート)
+    if (e.type === 'boss' || e.rank === 'Elite') {
       ctx.fillStyle = '#fff';
-      ctx.font = '12px serif';
+      ctx.font = '10px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText("BOSS", drawX + w/2, drawY - 15);
+      ctx.fillText(e.variant, drawX + w/2, drawY - 15);
     }
   });
 
   // 仲間
   state.party.forEach(comp => {
     if (comp.dead) {
-      // 墓石
       ctx.fillStyle = '#bdbdbd';
       ctx.beginPath();
       ctx.moveTo(comp.x + comp.width/2, comp.y);
@@ -343,7 +402,6 @@ export const renderGame = (
     }
     drawCharacter(ctx, comp, comp.x, comp.y, comp.width, comp.height, time);
     
-    // HP Bar
     const hpPercent = comp.hp / comp.maxHp;
     ctx.fillStyle = 'black';
     ctx.fillRect(comp.x, comp.y - 6, comp.width, 4);
