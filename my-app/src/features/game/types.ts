@@ -3,7 +3,7 @@
 export type TileType = 
   | 'grass' | 'dirt' | 'wall' | 'water' | 'crop' 
   | 'mountain' | 'dungeon_entrance' | 'stairs_down' | 'portal_out'
-  | 'town_entrance' | 'shop_floor';
+  | 'town_entrance' | 'shop_floor' | 'mine_entrance'; // mine_entranceを追加
 
 export interface Tile {
   x: number;
@@ -16,8 +16,8 @@ export interface Tile {
 
 // アイテム・装備関連
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'unique';
-export type ItemType = 'consumable' | 'weapon' | 'armor' | 'material';
-export type WeaponCategory = 'Sword' | 'Spear' | 'Axe' | 'Dagger' | 'Hammer' | 'Fist';
+export type ItemType = 'consumable' | 'weapon' | 'armor' | 'material'; // materialは既存
+export type WeaponCategory = 'Sword' | 'Spear' | 'Axe' | 'Dagger' | 'Hammer' | 'Fist' | 'Pickaxe'; // Pickaxeを追加
 export type AttackShape = 'arc' | 'line';
 
 export interface WeaponStats {
@@ -33,6 +33,7 @@ export interface WeaponStats {
   hitRate: number;
   critRate: number;
   isDualWield?: boolean;
+  miningPower?: number; // 採掘力
 }
 
 export type EnchantType = 'stat_boost' | 'speed_up' | 'magic_add' | 'extra_dmg' | 'range_up' | 'crit_rate' | 'crit_dmg' | 'hit_rate' | 'evade' | 'drop_rate';
@@ -65,10 +66,22 @@ export interface Item {
   specialEffect?: SpecialEffect;
   stats?: { defense?: number; hp?: number; mp?: number; };
   isBossDrop?: boolean;
+  description?: string; // 説明文追加
+  materialType?: string; // 素材の種類識別用
 }
 
 export interface InventoryItem extends Item {
   instanceId: string;
+}
+
+export interface CraftingRecipe {
+  id: string;
+  name: string;
+  result: Item;
+  materials: { materialType: string; count: number }[];
+  cost: number;
+  category: 'weapon' | 'armor' | 'consumable';
+  description: string;
 }
 
 // ワールドオブジェクト
@@ -88,10 +101,20 @@ export interface DroppedItem {
   life: number;
 }
 
-// エンティティ
-export type EntityType = 'player' | 'enemy' | 'item' | 'boss' | 'npc' | 'companion';
+// 資源オブジェクト（木、岩など）
+export type ResourceType = 'tree' | 'rock' | 'iron_ore' | 'gold_ore';
 
-// Job定義を拡張: Swordsman, Monkを追加 (Mageなどは仲間のために維持)
+export interface ResourceNode extends Entity {
+  type: 'resource';
+  resourceType: ResourceType;
+  hp: number;
+  maxHp: number;
+  tier: number; // 硬さ
+}
+
+// エンティティ
+export type EntityType = 'player' | 'enemy' | 'item' | 'boss' | 'npc' | 'companion' | 'resource';
+
 export type Job = 'Swordsman' | 'Warrior' | 'Mage' | 'Archer' | 'Cleric' | 'Monk';
 
 export type EnemyRace = 'Slime' | 'Goblin' | 'Skeleton' | 'Wolf' | 'Orc' | 'Ghost' | 'Golem' | 'Bat' | 'Spider' | 'Dragon';
@@ -119,17 +142,16 @@ export interface CombatEntity extends Entity {
   attack: number;
   job?: Job;
   
-  // 戦闘・アニメーション状態
   lastAttackTime?: number;
-  isAttacking?: boolean;      // 攻撃モーション中フラグ
-  attackStartTime?: number;   // 攻撃開始時刻
-  attackDuration?: number;    // モーション時間 (ms)
-  attackDirection?: number;   // 攻撃方向 (ラジアン)
+  isAttacking?: boolean;
+  attackStartTime?: number;
+  attackDuration?: number;
+  attackDirection?: number;
 }
 
 export interface PlayerEntity extends CombatEntity {
   type: 'player';
-  job: Job; // プレイヤーはJob必須
+  job: Job;
   stamina: number;
   inventory: InventoryItem[];
   equipment: { mainHand?: InventoryItem; armor?: InventoryItem; accessory?: InventoryItem; };
@@ -149,7 +171,7 @@ export interface CompanionEntity extends CombatEntity {
   joinDate: number;
 }
 
-export type NPCRole = 'inn' | 'weapon' | 'item' | 'revive' | 'recruit' | 'villager';
+export type NPCRole = 'inn' | 'weapon' | 'item' | 'revive' | 'recruit' | 'villager' | 'blacksmith';
 
 export interface NPCEntity extends Entity {
   type: 'npc';
@@ -158,6 +180,7 @@ export interface NPCEntity extends Entity {
   dialogue: string[];
   shopInventory?: Item[];
   recruitList?: CompanionEntity[];
+  craftingRecipes?: CraftingRecipe[]; // クラフトレシピを保持
 }
 
 export interface EnemyEntity extends CombatEntity {
@@ -180,7 +203,6 @@ export interface Particle {
   size: number;
 }
 
-// 設定・難易度
 export type Difficulty = 'easy' | 'normal' | 'hard' | 'expert';
 
 export interface GameSettings {
@@ -189,9 +211,8 @@ export interface GameSettings {
   difficulty: Difficulty;
 }
 
-// マップロケーション情報
 export interface LocationInfo {
-  type: 'world' | 'dungeon' | 'town';
+  type: 'world' | 'dungeon' | 'town' | 'mine'; // mine追加
   worldX: number;
   worldY: number;
   level: number;       
@@ -208,6 +229,7 @@ export interface GameState {
   party: CompanionEntity[];
   enemies: EnemyEntity[];
   npcs: NPCEntity[];
+  resources: ResourceNode[]; // 資源リスト追加
   particles: Particle[];
   chests: Chest[];
   droppedItems: DroppedItem[];
@@ -216,6 +238,7 @@ export interface GameState {
   settings: GameSettings;
   location: LocationInfo; 
   activeShop?: NPCEntity | null;
+  activeCrafting?: NPCEntity | null; // クラフト中のNPC
   dialogue?: { name: string, text: string } | null;
   isPaused: boolean;
   gameTime: number;
