@@ -3,7 +3,7 @@
 export type TileType = 
   | 'grass' | 'dirt' | 'wall' | 'water' | 'crop' 
   | 'mountain' | 'dungeon_entrance' | 'stairs_down' | 'portal_out'
-  | 'town_entrance' | 'shop_floor'; // 村関連追加
+  | 'town_entrance' | 'shop_floor';
 
 export interface Tile {
   x: number;
@@ -30,7 +30,7 @@ export interface Item {
     attack?: number;
     defense?: number;
     hp?: number;
-    mp?: number; // MP追加
+    mp?: number;
   };
   isBossDrop?: boolean;
 }
@@ -58,7 +58,14 @@ export interface DroppedItem {
 
 // エンティティ
 export type EntityType = 'player' | 'enemy' | 'item' | 'boss' | 'npc' | 'companion';
-export type Job = 'Warrior' | 'Mage' | 'Archer' | 'Cleric'; // 職業
+export type Job = 'Warrior' | 'Mage' | 'Archer' | 'Cleric';
+
+// 敵の種族定義
+export type EnemyRace = 
+  | 'Slime' | 'Goblin' | 'Skeleton' | 'Wolf' | 'Orc' 
+  | 'Ghost' | 'Golem' | 'Bat' | 'Spider' | 'Dragon';
+
+export type EnemyRank = 'Normal' | 'Elite' | 'Boss';
 
 export interface Entity {
   id: string;
@@ -75,26 +82,26 @@ export interface Entity {
 export interface CombatEntity extends Entity {
   hp: number;
   maxHp: number;
-  mp: number;     // MP追加
-  maxMp: number;  // 最大MP追加
+  mp: number;
+  maxMp: number;
   level: number;
   defense: number;
   attack: number;
-  job?: Job; // 職業
+  job?: Job;
 }
 
 export interface PlayerEntity extends CombatEntity {
   type: 'player';
   stamina: number;
   inventory: InventoryItem[];
-  gold: number; // お金追加
+  gold: number;
   xp: number;
   nextLevelXp: number;
 }
 
 export interface CompanionEntity extends CombatEntity {
   type: 'companion';
-  joinDate: number; // 加入日（古株判定など）
+  joinDate: number;
 }
 
 export type NPCRole = 'inn' | 'weapon' | 'item' | 'revive' | 'recruit' | 'villager';
@@ -104,12 +111,15 @@ export interface NPCEntity extends Entity {
   role: NPCRole;
   name: string;
   dialogue: string[];
-  shopInventory?: Item[]; // 店の商品
-  recruitList?: CompanionEntity[]; // 紹介屋のリスト
+  shopInventory?: Item[];
+  recruitList?: CompanionEntity[];
 }
 
 export interface EnemyEntity extends CombatEntity {
   type: 'enemy' | 'boss';
+  race: EnemyRace;      // 種族
+  variant: string;      // 亜種名
+  rank: EnemyRank;      // ランク
   targetId?: string | null;
   dropRate: number;
   isBoss?: boolean;
@@ -136,21 +146,21 @@ export interface GameSettings {
 
 // マップロケーション情報
 export interface LocationInfo {
-  type: 'world' | 'dungeon' | 'town'; // town追加
+  type: 'world' | 'dungeon' | 'town';
   level: number;       
   maxDepth?: number;   
   dungeonId?: string;  
   difficultyMult?: number; 
-  townId?: string; // 村ID
-  mapsSinceLastTown?: number; // 最後の村から何マップ経過したか
+  townId?: string;
+  mapsSinceLastTown?: number;
 }
 
 export interface GameState {
   map: Tile[][];
   player: PlayerEntity;
-  party: CompanionEntity[]; // パーティーメンバー（仲間）
+  party: CompanionEntity[];
   enemies: EnemyEntity[];
-  npcs: NPCEntity[]; // NPCリスト追加
+  npcs: NPCEntity[];
   particles: Particle[];
   chests: Chest[];
   droppedItems: DroppedItem[];
@@ -158,5 +168,5 @@ export interface GameState {
   mode: 'combat' | 'build';
   settings: GameSettings;
   location: LocationInfo; 
-  activeShop?: NPCEntity | null; // 現在開いているショップ
+  activeShop?: NPCEntity | null;
 }
