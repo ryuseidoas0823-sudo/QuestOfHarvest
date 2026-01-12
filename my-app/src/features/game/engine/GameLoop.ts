@@ -2,7 +2,7 @@ import { GAME_CONFIG, DIFFICULTY_CONFIG } from '../../../assets/constants';
 import { THEME } from '../../../assets/theme';
 import { GameState, CompanionEntity } from '../types';
 import { checkCollision, tryMove } from './Physics';
-import { updateEnemyAI, createEnemy } from '../entities/Enemy';
+import { generateEnemy } from '../lib/EnemyGenerator'; // 変更
 import { generateRandomItem, generateBossDrop } from '../lib/ItemGenerator';
 import { generateDungeonMap, generateWorldMap, generateTownMap } from '../world/MapGenerator';
 
@@ -22,6 +22,7 @@ export const updateGame = (
   const speedMult = settings.gameSpeed;
   const diffConfig = DIFFICULTY_CONFIG[settings.difficulty];
 
+  // ... (プレイヤー移動、仲間AI、マップ遷移などは変更なし) ...
   // --- 1. プレイヤー移動 ---
   let dx = 0;
   let dy = 0;
@@ -45,16 +46,13 @@ export const updateGame = (
   // --- 2. 仲間 (Companion) AI ---
   party.forEach((comp, index) => {
     if (comp.dead) return;
-
-    // 基本はプレイヤーを追従（半径3マス = 120px程度）
     const distToPlayer = Math.sqrt((player.x - comp.x)**2 + (player.y - comp.y)**2);
     let targetX = player.x;
     let targetY = player.y;
     let action = 'follow';
 
-    // 戦闘モードなら近くの敵を狙う
     if (mode === 'combat' && enemies.length > 0) {
-      let nearestDist = 300; // 索敵範囲
+      let nearestDist = 300;
       let nearestEnemy = null;
       for (const enemy of enemies) {
         if (enemy.dead) continue;
@@ -75,25 +73,22 @@ export const updateGame = (
     const cSpeed = comp.speed * speedMult;
 
     if (action === 'follow') {
-      if (distToPlayer > 80) { // 離れすぎたら近づく
+      if (distToPlayer > 80) {
         const angle = Math.atan2(targetY - comp.y, targetX - comp.x);
-        // 少しばらけさせる
         const offset = (index + 1) * 0.5;
         cdx = Math.cos(angle + offset) * cSpeed;
         cdy = Math.sin(angle + offset) * cSpeed;
       }
     } else if (action === 'attack') {
         const distToEnemy = Math.sqrt((targetX - comp.x)**2 + (targetY - comp.y)**2);
-        if (distToEnemy > 40) { // 攻撃範囲まで近づく
+        if (distToEnemy > 40) {
             const angle = Math.atan2(targetY - comp.y, targetX - comp.x);
             cdx = Math.cos(angle) * cSpeed;
             cdy = Math.sin(angle) * cSpeed;
         } else {
-            // 攻撃
-            // 実際はクールダウンが必要だが簡易的に毎フレーム判定
             const enemy = enemies.find(e => Math.abs(e.x - targetX) < 1 && Math.abs(e.y - targetY) < 1);
-            if (enemy && Math.random() > 0.95) { // 攻撃頻度
-                enemy.hp -= comp.attack * 0.5; // ダメージ
+            if (enemy && Math.random() > 0.95) {
+                enemy.hp -= comp.attack * 0.5;
                 state.particles.push({
                     x: enemy.x, y: enemy.y, vx: 0, vy: 0, life: 0.5, color: '#00bfff', size: 5
                 });
@@ -117,34 +112,20 @@ export const updateGame = (
   if (tx >= 0 && tx < MAP_WIDTH && ty >= 0 && ty < MAP_HEIGHT) {
     const tile = map[ty][tx];
 
-    // 村に入る
     if (tile.type === 'town_entrance') {
-      state.location = {
-        type: 'town',
-        level: 0,
-        townId: `town_${Date.now()}`
-      };
-      // 村マップ生成
+      state.location = { type: 'town', level: 0, townId: `town_${Date.now()}` };
       const town = generateTownMap(player.level);
       state.map = town.map;
       state.npcs = town.npcs;
       state.chests = [];
       state.droppedItems = [];
-      state.enemies = []; // 村に敵はいない
+      state.enemies = [];
       state.player.x = town.spawnPoint.x;
       state.player.y = town.spawnPoint.y;
-      // 仲間も移動
       party.forEach(c => { c.x = town.spawnPoint.x; c.y = town.spawnPoint.y; });
     }
-    // ダンジョンに入る
     else if (tile.type === 'dungeon_entrance' && tile.meta) {
-      state.location = {
-        type: 'dungeon',
-        level: 1,
-        maxDepth: tile.meta.maxDepth,
-        dungeonId: `dungeon_${Date.now()}`
-      };
-      
+      state.location = { type: 'dungeon', level: 1, maxDepth: tile.meta.maxDepth, dungeonId: `dungeon_${Date.now()}` };
       const dungeon = generateDungeonMap(1, tile.meta.maxDepth);
       state.map = dungeon.map;
       state.chests = dungeon.chests;
@@ -156,7 +137,6 @@ export const updateGame = (
       party.forEach(c => { c.x = dungeon.spawnPoint.x; c.y = dungeon.spawnPoint.y; });
       spawnDungeonEnemies(state, 1);
     }
-    // 次の階層へ
     else if (tile.type === 'stairs_down') {
       const nextLevel = state.location.level + 1;
       state.location.level = nextLevel;
@@ -171,28 +151,23 @@ export const updateGame = (
       party.forEach(c => { c.x = dungeon.spawnPoint.x; c.y = dungeon.spawnPoint.y; });
 
       if (dungeon.bossSpawn) {
-        const boss = createEnemy(dungeon.bossSpawn.x, dungeon.bossSpawn.y);
-        boss.type = 'boss';
-        boss.width = 60;
-        boss.height = 60;
-        boss.maxHp *= 5 * diffConfig.hpMult;
+        // Boss Spawn with generateEnemy
+        // レベルに応じてランダムなボスの種族を選ぶか、固定するか。ここではランダム
+        const boss = generateEnemy(dungeon.bossSpawn.x, dungeon.bossSpawn.y, player.level + 5, true);
+        boss.maxHp *= diffConfig.hpMult;
         boss.hp = boss.maxHp;
-        boss.attack *= 2;
         state.enemies.push(boss);
       } else {
         spawnDungeonEnemies(state, nextLevel);
       }
     }
-    // 地上へ帰還 (ポータル)
     else if (tile.type === 'portal_out') {
-      // 村から出た場合はカウントリセット、ダンジョンから出た場合はそのまま
       if (location.type === 'town') {
-        state.location = { type: 'world', level: 0, mapsSinceLastTown: 0 }; // リセット
+        state.location = { type: 'world', level: 0, mapsSinceLastTown: 0 };
       } else {
         const prev = state.location.mapsSinceLastTown || 0;
         state.location = { type: 'world', level: 0, mapsSinceLastTown: prev + 1 };
       }
-      
       const world = generateWorldMap(state.location.mapsSinceLastTown);
       state.map = world.map;
       state.chests = world.chests;
@@ -206,21 +181,19 @@ export const updateGame = (
     }
   }
 
-  // --- 4. NPCインタラクション（ショップ） ---
+  // --- 4. NPCインタラクション ---
   if (location.type === 'town' && input.mouse.leftDown) {
     const mx = input.mouse.x + state.camera.x;
     const my = input.mouse.y + state.camera.y;
-    
-    // NPCクリック判定
     for (const npc of npcs) {
       const d = Math.sqrt((mx - npc.x)**2 + (my - npc.y)**2);
       if (d < 40) {
-        state.activeShop = npc; // UI側で検知してモーダルを開く
+        state.activeShop = npc;
       }
     }
   }
 
-  // --- 5. カメラ追従 ---
+  // --- 5. カメラ ---
   state.camera.x = player.x - VIEWPORT_WIDTH / 2;
   state.camera.y = player.y - VIEWPORT_HEIGHT / 2;
   state.camera.x = Math.max(0, Math.min(state.camera.x, MAP_WIDTH * TILE_SIZE - VIEWPORT_WIDTH));
@@ -242,9 +215,10 @@ export const updateGame = (
 
     // 対プレイヤー
     if (checkCollision(player, enemy)) {
-      let dmg = 0.1 * diffConfig.hpMult;
-      if (enemy.type === 'boss') dmg *= 2;
-      player.hp -= dmg;
+      let dmg = enemy.attack * 0.1 * diffConfig.hpMult; // 敵攻撃力反映
+      if (enemy.type === 'boss') dmg *= 1.5;
+      player.hp -= Math.max(1, dmg - player.defense * 0.05); // 防御力考慮
+      
       if (Math.random() > 0.9) {
         state.particles.push({
           x: player.x, y: player.y, vx: 0, vy: 0, life: 1.0, color: THEME.colors.blood, size: 3
@@ -255,27 +229,30 @@ export const updateGame = (
     // 対仲間
     party.forEach(comp => {
         if (!comp.dead && checkCollision(comp, enemy)) {
-            let dmg = 0.1 * diffConfig.hpMult;
-            comp.hp -= dmg;
+            let dmg = enemy.attack * 0.1 * diffConfig.hpMult;
+            comp.hp -= Math.max(1, dmg - comp.defense * 0.05);
             if (comp.hp <= 0) {
-                comp.dead = true; // 死亡状態
+                comp.dead = true;
             }
         }
     });
   });
 
-  // プレイヤー攻撃（マウスクリック）
+  // プレイヤー攻撃
   if (input.mouse.leftDown && mode === 'combat') {
     const worldMx = input.mouse.x + state.camera.x;
     const worldMy = input.mouse.y + state.camera.y;
     enemies.forEach(enemy => {
       if (enemy.dead) return;
       const d = Math.sqrt((worldMx - enemy.x)**2 + (worldMy - enemy.y)**2);
-      if (d < 50) {
-        enemy.hp -= 2 / diffConfig.defenseMult;
+      if (d < (enemy.type === 'boss' ? 80 : 50)) {
+        const defenseFactor = 1 / diffConfig.defenseMult;
+        // プレイヤーステータス反映
+        const dmg = (player.attack * 0.5) * defenseFactor;
+        enemy.hp -= Math.max(1, dmg - enemy.defense * 0.1);
+        
         if (enemy.hp <= 0) {
           enemy.dead = true;
-          // ドロップ処理
           if (enemy.type === 'boss') {
              const bossItem = generateBossDrop(player.level);
              state.droppedItems.push({ id: crypto.randomUUID(), item: bossItem, x: enemy.x, y: enemy.y, life: 9999 });
@@ -283,13 +260,13 @@ export const updateGame = (
              const ty = Math.floor(enemy.y / TILE_SIZE);
              if (state.map[ty][tx]) { state.map[ty][tx].type = 'portal_out'; state.map[ty][tx].solid = false; }
           } else {
-             if (Math.random() < 0.5 * diffConfig.dropRateMult) {
+             if (Math.random() < enemy.dropRate * diffConfig.dropRateMult) {
                 const item = generateRandomItem(player.level, diffConfig.rareDropMult);
                 state.droppedItems.push({ id: crypto.randomUUID(), item, x: enemy.x, y: enemy.y, life: 1000 });
              }
           }
-          player.xp += enemy.type === 'boss' ? 500 : 10;
-          player.gold += Math.floor(Math.random() * 10) + 1; // お金獲得
+          player.xp += enemy.level * 5; // 経験値計算変更
+          player.gold += Math.floor(Math.random() * enemy.level * 2) + 1;
         }
       }
     });
@@ -310,7 +287,6 @@ export const updateGame = (
   state.particles = state.particles.filter(p => p.life > 0);
   state.enemies = state.enemies.filter(e => !e.dead);
 
-  // ワールドでの敵リスポーン（村以外）
   if (state.location.type === 'world' && state.enemies.length < 5 && Math.random() < GAME_CONFIG.ENEMY_SPAWN_RATE) {
     spawnWorldEnemies(state);
   }
@@ -320,7 +296,8 @@ const spawnWorldEnemies = (state: GameState) => {
   const { MAP_WIDTH, MAP_HEIGHT, TILE_SIZE } = GAME_CONFIG;
   const ex = Math.random() * (MAP_WIDTH * TILE_SIZE);
   const ey = Math.random() * (MAP_HEIGHT * TILE_SIZE);
-  state.enemies.push(createEnemy(ex, ey));
+  // レベルはプレイヤー依存
+  state.enemies.push(generateEnemy(ex, ey, state.player.level));
 };
 
 const spawnDungeonEnemies = (state: GameState, level: number) => {
@@ -332,8 +309,7 @@ const spawnDungeonEnemies = (state: GameState, level: number) => {
        ex = Math.random() * (MAP_WIDTH * TILE_SIZE);
        ey = Math.random() * (MAP_HEIGHT * TILE_SIZE);
      } while(state.map[Math.floor(ey/TILE_SIZE)][Math.floor(ex/TILE_SIZE)].solid);
-     const e = createEnemy(ex, ey);
-     e.maxHp *= (1 + level * 0.1); e.hp = e.maxHp;
-     state.enemies.push(e);
+     // ダンジョンレベル補正
+     state.enemies.push(generateEnemy(ex, ey, state.player.level + level));
   }
 };
