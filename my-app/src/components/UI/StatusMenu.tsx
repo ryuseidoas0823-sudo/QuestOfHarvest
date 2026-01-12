@@ -10,29 +10,21 @@ interface StatusMenuProps {
 export const StatusMenu: React.FC<StatusMenuProps> = ({ player, companions, onClose }) => {
   const [selectedTab, setSelectedTab] = useState<'player' | number>('player');
 
-  // 表示するエンティティを選択
   const currentEntity = selectedTab === 'player' ? player : companions[selectedTab];
   const isPlayer = currentEntity.type === 'player';
 
-  // 経験値の計算 (プレイヤーのみXPを持つ仕様のため、仲間は仮表示)
   const currentExp = isPlayer ? (currentEntity as PlayerEntity).xp : 0;
   const nextExp = isPlayer ? (currentEntity as PlayerEntity).nextLevelXp : 1;
   const expPercent = Math.min(100, (currentExp / nextExp) * 100);
 
-  // 装備情報の取得 (プレイヤーは装備を持つが、仲間は固定装備等の扱い)
   const mainHand = isPlayer ? (currentEntity as PlayerEntity).equipment.mainHand : null;
   const weaponName = mainHand ? mainHand.name : (isPlayer ? 'Empty' : 'Default Weapon');
-  
-  // 防具は現行の型定義(types.ts)でPlayerEntity.equipmentにarmorが含まれていないため、
-  // 将来的な拡張を見越して仮表示、またはinventoryから検索するロジックが必要ですが、
-  // ここではシンプルに「None」または防御力からの推定とします。
-  const armorName = 'Clothes'; // 仮
+  const armorName = 'Clothes'; 
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm select-none">
       <div className="bg-slate-800 w-[700px] max-w-[95%] h-[550px] max-h-[90%] rounded-xl shadow-2xl flex flex-col border border-slate-600 overflow-hidden text-white">
         
-        {/* Header */}
         <div className="flex justify-between items-center p-4 bg-slate-900 border-b border-slate-700">
           <h2 className="text-xl font-bold flex items-center gap-2 text-[#d4af37] font-serif">
             <span className="text-2xl">📜</span> Status
@@ -45,10 +37,8 @@ export const StatusMenu: React.FC<StatusMenuProps> = ({ player, companions, onCl
           </button>
         </div>
 
-        {/* Body */}
         <div className="flex flex-1 overflow-hidden">
           
-          {/* Sidebar (Tabs) */}
           <div className="w-48 bg-slate-900/50 border-r border-slate-700 overflow-y-auto">
             <button
               onClick={() => setSelectedTab('player')}
@@ -78,10 +68,8 @@ export const StatusMenu: React.FC<StatusMenuProps> = ({ player, companions, onCl
             ))}
           </div>
 
-          {/* Main Content */}
           <div className="flex-1 p-6 overflow-y-auto bg-slate-800">
             <div className="flex items-start gap-6 mb-8">
-              {/* Avatar Placeholder */}
               <div 
                 className="w-20 h-20 rounded-lg shadow-inner flex items-center justify-center text-4xl border-2 border-white/20 relative overflow-hidden"
                 style={{ backgroundColor: currentEntity.color || '#666' }}
@@ -90,7 +78,6 @@ export const StatusMenu: React.FC<StatusMenuProps> = ({ player, companions, onCl
                 {selectedTab === 'player' ? '🧙‍♂️' : '🛡️'}
               </div>
               
-              {/* Name & Level */}
               <div>
                 <h3 className="text-3xl font-bold mb-1 font-serif text-[#d4af37]">
                   {selectedTab === 'player' ? 'Hero' : (currentEntity as CompanionEntity).job}
@@ -115,13 +102,10 @@ export const StatusMenu: React.FC<StatusMenuProps> = ({ player, companions, onCl
 
             <div className="grid grid-cols-2 gap-8">
               
-              {/* Stats Column */}
               <div className="space-y-5">
                 <h4 className="text-xs uppercase tracking-widest text-gray-500 border-b border-gray-700 pb-1 font-bold">Attributes</h4>
                 
-                {/* HP/MP Bars */}
                 <div className="space-y-4">
-                  {/* HP */}
                   <div>
                     <div className="flex justify-between text-xs mb-1">
                       <span className="text-gray-300 font-bold">HP</span>
@@ -135,7 +119,6 @@ export const StatusMenu: React.FC<StatusMenuProps> = ({ player, companions, onCl
                     </div>
                   </div>
 
-                  {/* MP */}
                   <div>
                     <div className="flex justify-between text-xs mb-1">
                       <span className="text-gray-300 font-bold">MP</span>
@@ -149,7 +132,6 @@ export const StatusMenu: React.FC<StatusMenuProps> = ({ player, companions, onCl
                     </div>
                   </div>
 
-                  {/* EXP (Player only) */}
                   {isPlayer && (
                     <div>
                       <div className="flex justify-between text-xs mb-1">
@@ -166,7 +148,6 @@ export const StatusMenu: React.FC<StatusMenuProps> = ({ player, companions, onCl
                   )}
                 </div>
 
-                {/* Numerical Stats */}
                 <div className="grid grid-cols-2 gap-3 mt-4">
                   <div className="bg-slate-900/50 p-2 rounded border border-slate-700/50">
                     <div className="text-gray-500 text-[10px] uppercase">Attack</div>
@@ -189,12 +170,10 @@ export const StatusMenu: React.FC<StatusMenuProps> = ({ player, companions, onCl
                 </div>
               </div>
 
-              {/* Equipment Column */}
               <div className="space-y-5">
                 <h4 className="text-xs uppercase tracking-widest text-gray-500 border-b border-gray-700 pb-1 font-bold">Equipment</h4>
                 
                 <div className="space-y-3">
-                  {/* Weapon */}
                   <div className="bg-slate-900/40 p-3 rounded-lg flex items-center gap-3 border border-slate-700/50 hover:bg-slate-800/60 transition-colors cursor-help">
                     <div className="w-10 h-10 bg-slate-800 rounded border border-slate-600 flex items-center justify-center text-xl shadow-inner">
                       ⚔️
@@ -207,7 +186,6 @@ export const StatusMenu: React.FC<StatusMenuProps> = ({ player, companions, onCl
                     </div>
                   </div>
 
-                  {/* Armor */}
                   <div className="bg-slate-900/40 p-3 rounded-lg flex items-center gap-3 border border-slate-700/50 hover:bg-slate-800/60 transition-colors cursor-help">
                     <div className="w-10 h-10 bg-slate-800 rounded border border-slate-600 flex items-center justify-center text-xl shadow-inner">
                       🛡️
@@ -220,7 +198,6 @@ export const StatusMenu: React.FC<StatusMenuProps> = ({ player, companions, onCl
                     </div>
                   </div>
                   
-                  {/* Accessories placeholder */}
                   <div className="bg-slate-900/20 p-3 rounded-lg flex items-center gap-3 border border-slate-800 opacity-60">
                     <div className="w-10 h-10 bg-slate-800 rounded border border-slate-700 flex items-center justify-center text-xl grayscale opacity-50">
                       💍
