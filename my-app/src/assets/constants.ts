@@ -1,56 +1,31 @@
 export const GAME_CONFIG = {
-  // 1区画（1 MAP）のサイズ
-  // 30だと狭すぎるため50に戻しますが、これを1単位として扱います
-  TILE_SIZE: 40,
-  MAP_WIDTH: 50,
-  MAP_HEIGHT: 50,
+  // 画面サイズ設定 (ズーム調整)
+  // タイルサイズを大きくし、表示するタイル数を減らすことで「寄った」画角にする
+  TILE_SIZE: 48, // 32 -> 48 に拡大
+  SCREEN_WIDTH: 800,
+  SCREEN_HEIGHT: 600,
   
-  // ワールド全体の広さ（区画数）
-  // 30x30 のジグソーパズルのように配置されます
-  WORLD_SIZE_W: 30,
-  WORLD_SIZE_H: 30,
-  
-  // ビューポート
+  // ビューポート（カメラが映す範囲）
+  // 画面サイズと同じにすることで等倍表示、小さくすると拡大されるが、
+  // ここではCanvasサイズ(SCREEN_W/H)に合わせて調整
   VIEWPORT_WIDTH: 800,
   VIEWPORT_HEIGHT: 600,
-  
+
+  // マップ設定
+  MAP_WIDTH: 50,
+  MAP_HEIGHT: 50,
+  WORLD_SIZE_W: 5, // 5x5 chunk
+  WORLD_SIZE_H: 5,
+
   // ゲームプレイ設定
-  PLAYER_SPEED: 2.5,
-  ENEMY_BASE_SPEED: 0.8,
-  ENEMY_SPAWN_RATE: 0.005,
-  MAX_ENEMIES: 20, // 1区画あたりの敵上限
-  
-  // インベントリ制限
-  MAX_INVENTORY_SLOTS: 20,
-} as const;
+  PLAYER_SPEED: 4,
+  ENEMY_SPAWN_RATE: 0.02,
+  DAY_NIGHT_CYCLE: 60000 * 5, // 5分
+};
 
 export const DIFFICULTY_CONFIG = {
-  easy: {
-    name: 'Easy',
-    hpMult: 0.8,
-    defenseMult: 0.8,
-    dropRateMult: 0.8,
-    rareDropMult: 0.5,
-  },
-  normal: {
-    name: 'Normal',
-    hpMult: 1.0,
-    defenseMult: 1.0,
-    dropRateMult: 1.0,
-    rareDropMult: 1.0,
-  },
-  hard: {
-    name: 'Hard',
-    hpMult: 1.3,
-    defenseMult: 1.3,
-    dropRateMult: 1.3,
-    rareDropMult: 1.2,
-  },
-  expert: {
-    name: 'Expert',
-    hpMult: 1.8,
-    defenseMult: 1.5,
-    dropRateMult: 2.0,
-    rareDropMult: 2.0,
-  }
-} as const;
+  easy: { hpMult: 0.8, damageMult: 0.8, expMult: 1.2, dropRateMult: 1.5 },
+  normal: { hpMult: 1.0, damageMult: 1.0, expMult: 1.0, dropRateMult: 1.0 },
+  hard: { hpMult: 1.5, damageMult: 1.5, expMult: 0.8, dropRateMult: 0.8 },
+  expert: { hpMult: 2.5, damageMult: 2.5, expMult: 0.5, dropRateMult: 0.5 },
+};
