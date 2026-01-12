@@ -1,8 +1,14 @@
 export const GAME_CONFIG = {
-  // マップ設定 (30x30に縮小して軽量化)
+  // 1区画（1 MAP）のサイズ
+  // 30だと狭すぎるため50に戻しますが、これを1単位として扱います
   TILE_SIZE: 40,
-  MAP_WIDTH: 30,
-  MAP_HEIGHT: 30,
+  MAP_WIDTH: 50,
+  MAP_HEIGHT: 50,
+  
+  // ワールド全体の広さ（区画数）
+  // 30x30 のジグソーパズルのように配置されます
+  WORLD_SIZE_W: 30,
+  WORLD_SIZE_H: 30,
   
   // ビューポート
   VIEWPORT_WIDTH: 800,
@@ -12,7 +18,7 @@ export const GAME_CONFIG = {
   PLAYER_SPEED: 2.5,
   ENEMY_BASE_SPEED: 0.8,
   ENEMY_SPAWN_RATE: 0.005,
-  MAX_ENEMIES: 30, // マップが狭くなったので敵の上限も少し減らす
+  MAX_ENEMIES: 20, // 1区画あたりの敵上限
   
   // インベントリ制限
   MAX_INVENTORY_SLOTS: 20,
