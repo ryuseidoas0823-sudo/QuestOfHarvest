@@ -23,7 +23,6 @@ export const CraftingMenu: React.FC<CraftingMenuProps> = ({ player, recipes, onC
   const handleCraft = () => {
     if (selectedRecipe && checkMaterials(selectedRecipe) && player.gold >= selectedRecipe.cost) {
       onCraft(selectedRecipe);
-      // 成功エフェクトなどはGameLoop側で処理するか、ここで音を鳴らすなど
     }
   };
 
