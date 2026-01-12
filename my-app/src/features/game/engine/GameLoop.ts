@@ -6,8 +6,6 @@ import { generateEnemy } from '../lib/EnemyGenerator';
 import { generateRandomItem, generateBossDrop } from '../lib/ItemGenerator';
 import { generateDungeonMap, generateWorldChunk, generateTownMap } from '../world/MapGenerator';
 
-const TILE_SIZE = 40;
-
 export const updateGame = (
   state: GameState, 
   input: { keys: { [key: string]: boolean }, mouse: any },
@@ -191,8 +189,6 @@ export const updateGame = (
     const nextC = tryMove(comp, cdx, cdy, map); comp.x = nextC.x; comp.y = nextC.y;
   });
 
-  // (以下、マップ遷移や敵AIなどは変更なしのため省略。generateWorldChunk呼び出しは維持)
-  // ... [Omitted for brevity, assume existing logic remains] ...
   const tx = Math.floor((player.x + player.width/2) / TILE_SIZE);
   const ty = Math.floor((player.y + player.height/2) / TILE_SIZE);
   if (tx >= 0 && tx < MAP_WIDTH && ty >= 0 && ty < MAP_HEIGHT) {
