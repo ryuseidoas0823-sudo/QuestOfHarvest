@@ -1,7 +1,6 @@
 export const GAME_CONFIG = {
-  // 画面サイズ設定 (ズーム調整)
-  // TILE_SIZEを小さくして、より広範囲が見えるようにします
-  TILE_SIZE: 32, // 48 -> 32 に縮小（カメラを引く）
+  // 画面サイズ設定 (ズーム調整: TILE_SIZE=32で広範囲を表示)
+  TILE_SIZE: 32, 
   SCREEN_WIDTH: 800,
   SCREEN_HEIGHT: 600,
   
@@ -10,13 +9,13 @@ export const GAME_CONFIG = {
   VIEWPORT_HEIGHT: 600,
 
   // マップ設定
-  MAP_WIDTH: 60, // マップ自体も少し広く
+  MAP_WIDTH: 60,
   MAP_HEIGHT: 60,
   WORLD_SIZE_W: 5,
   WORLD_SIZE_H: 5,
 
   // ゲームプレイ設定
-  PLAYER_SPEED: 4, // TILE_SIZE縮小に合わせて速度感調整（ピクセルベースならそのままでも良いが、バランス見て）
+  PLAYER_SPEED: 4, 
   ENEMY_SPAWN_RATE: 0.02,
   DAY_NIGHT_CYCLE: 60000 * 5,
 };
