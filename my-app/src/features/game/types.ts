@@ -112,6 +112,32 @@ export interface ResourceNode extends Entity {
   tier: number; // 硬さ
 }
 
+// スキル定義
+export type SkillType = 'active' | 'passive';
+export type SkillTarget = 'self' | 'enemy' | 'area' | 'direction';
+
+export interface Skill {
+  id: string;
+  name: string;
+  description: string;
+  type: SkillType;
+  target: SkillTarget;
+  mpCost: number;
+  cooldown: number; // 秒
+  icon: string;
+  unlockLevel: number;
+  damageMultiplier?: number;
+  range?: number;
+  effectDuration?: number;
+  jobRequirement?: Job[];
+}
+
+export interface PlayerSkillState {
+  skillId: string;
+  lastUsed: number; // timestamp
+  level: number;
+}
+
 // エンティティ
 export type EntityType = 'player' | 'enemy' | 'item' | 'boss' | 'npc' | 'companion' | 'resource';
 
@@ -164,6 +190,9 @@ export interface PlayerEntity extends CombatEntity {
     speed: number;
     magic: number;
   };
+  // 新規追加
+  skills: PlayerSkillState[];
+  hotbar: (string | null)[]; // skillId or itemId set to slots 0-4
 }
 
 export interface CompanionEntity extends CombatEntity {
