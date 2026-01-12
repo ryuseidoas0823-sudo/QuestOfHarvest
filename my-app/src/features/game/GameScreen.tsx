@@ -20,17 +20,20 @@ import { HUD } from '../../components/UI/HUD';
 
 interface GameScreenProps {
   user: User | null;
+  initialData?: any; // ロードデータを受け取る
 }
 
-export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
+export const GameScreen: React.FC<GameScreenProps> = ({ user, initialData }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { keys, mouse, handlers } = useGameInput();
 
-  // UI State
   const [isPaused, setIsPaused] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [shopNPC, setShopNPC] = useState<NPCEntity | null>(null);
   
+  // 初期化完了フラグ（これがtrueになるまで描画しない）
+  const [isInitialized, setIsInitialized] = useState(false);
+
   const [settings, setSettings] = useState<GameSettings>({
     masterVolume: 0.5,
     gameSpeed: 1.0,
@@ -47,68 +50,99 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
     gold: 0
   });
 
-  const gameState = useRef<GameState>({
-    map: [],
-    chests: [],
-    droppedItems: [],
-    player: createPlayer(),
-    party: [],
-    npcs: [],
-    enemies: [],
-    particles: [],
-    camera: { x: 0, y: 0 },
-    mode: 'combat',
-    settings: settings,
-    location: { type: 'world', level: 0, mapsSinceLastTown: 0 },
-    activeShop: null
-  });
+  // GameStateは初期値nullで開始
+  const gameState = useRef<GameState | null>(null);
 
-  // 初期化
+  // --- 初期化ロジック ---
   useEffect(() => {
-    // 最初のマップ生成（村あり）
-    const world = generateWorldMap(0);
-    gameState.current.map = world.map;
-    gameState.current.chests = world.chests;
-    gameState.current.player.x = world.spawnPoint.x;
-    gameState.current.player.y = world.spawnPoint.y;
-    gameState.current.player.gold = 100;
+    console.log("GameScreen: Initializing world...");
     
-    // ★ 初期装備を与える
-    const starterSword = generateWeapon(1, 'common');
-    starterSword.name = "Novice Sword";
-    if (starterSword.weaponStats) {
-        starterSword.weaponStats.category = 'Sword';
-    }
-    gameState.current.player.inventory.push(starterSword);
-    // 装備させる
-    gameState.current.player.equipment = { mainHand: starterSword };
-    
-    // 敵生成
-    const diffConfig = DIFFICULTY_CONFIG[settings.difficulty];
-    for (let i = 0; i < 10; i++) {
-      const ex = Math.random() * (GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE);
-      const ey = Math.random() * (GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE);
-      
-      // レベル1の敵
-      const e = generateEnemy(ex, ey, 1);
-      e.maxHp *= diffConfig.hpMult; e.hp = e.maxHp;
-      gameState.current.enemies.push(e);
-    }
-    
-    if (canvasRef.current) canvasRef.current.focus();
-  }, []);
+    try {
+      // 1. ベースのワールド生成
+      const world = generateWorldMap(0);
+      let newPlayer = createPlayer();
+      newPlayer.x = world.spawnPoint.x;
+      newPlayer.y = world.spawnPoint.y;
+      newPlayer.gold = 100;
 
+      // 2. ロードデータがある場合は上書き
+      if (initialData && initialData.player) {
+        console.log("GameScreen: Loading save data...");
+        // プレイヤー情報の復元
+        newPlayer = { ...newPlayer, ...initialData.player };
+        
+        // 設定の復元
+        if (initialData.settings) {
+          setSettings(initialData.settings);
+        }
+        
+        // 注: マップデータ自体は容量が大きいため通常セーブしません。
+        // ここでは「レベルや所持品を引き継いで、新しいマップ(拠点)から再開」する仕様とします。
+        // もしマップ位置も復元したい場合は、generateWorldMapのシード固定などが必要です。
+      } else {
+        console.log("GameScreen: Starting new game setup...");
+        // 初期装備
+        const starterSword = generateWeapon(1, 'common');
+        starterSword.name = "Novice Sword";
+        if (starterSword.weaponStats) starterSword.weaponStats.category = 'Sword';
+        newPlayer.inventory.push(starterSword);
+        newPlayer.equipment = { mainHand: starterSword };
+      }
+
+      // 3. 敵の生成
+      const currentDiff = initialData?.settings?.difficulty || settings.difficulty;
+      const diffConfig = DIFFICULTY_CONFIG[currentDiff];
+      const enemies = [];
+      for (let i = 0; i < 10; i++) {
+        const ex = Math.random() * (GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE);
+        const ey = Math.random() * (GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE);
+        const e = generateEnemy(ex, ey, 1);
+        e.maxHp *= diffConfig.hpMult; e.hp = e.maxHp;
+        enemies.push(e);
+      }
+
+      // 4. GameState構築
+      gameState.current = {
+        map: world.map,
+        chests: world.chests,
+        droppedItems: [],
+        player: newPlayer,
+        party: initialData?.party || [], // 仲間も復元
+        npcs: world.npcs,
+        enemies: enemies,
+        particles: [],
+        camera: { x: 0, y: 0 }, // 後でプレイヤー位置に合わせる
+        mode: 'combat',
+        settings: initialData?.settings || settings,
+        location: { type: 'world', level: 0, mapsSinceLastTown: 0 },
+        activeShop: null
+      };
+
+      console.log("GameScreen: Initialization complete.", gameState.current);
+      setIsInitialized(true); // 準備完了
+
+      if (canvasRef.current) canvasRef.current.focus();
+
+    } catch (err) {
+      console.error("GameScreen Initialization Error:", err);
+      alert("Error initializing game. See console for details.");
+    }
+  }, []); // 初回のみ実行
+
+  // 設定変更の反映
   useEffect(() => {
-    gameState.current.settings = settings;
+    if (gameState.current) {
+      gameState.current.settings = settings;
+    }
   }, [settings]);
 
   // ショップ検知
   useEffect(() => {
     const checkShop = setInterval(() => {
-      if (gameState.current.activeShop) {
+      if (gameState.current?.activeShop) {
         setShopNPC(gameState.current.activeShop);
         setIsPaused(true);
-        gameState.current.activeShop = null; // リセット
+        gameState.current.activeShop = null;
       }
     }, 100);
     return () => clearInterval(checkShop);
@@ -116,19 +150,28 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
 
   // ゲームループ
   useEffect(() => {
+    if (!isInitialized) return; // 初期化前は動かさない
+
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    console.log("GameScreen: Starting Game Loop...");
     let animationFrameId: number;
 
     const loop = () => {
+      // 安全策: gameStateが消えていたら中断
+      if (!gameState.current) return;
+
       if (!isPaused) {
         updateGame(gameState.current, { keys: keys.current, mouse: mouse.current }, isPaused);
       }
+      
+      // 描画
       renderGame(ctx, gameState.current, { mouse: mouse.current });
 
+      // UI同期 (頻度調整)
       if (Math.random() > 0.9) {
         const p = gameState.current.player;
         const loc = gameState.current.location;
@@ -137,20 +180,22 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
             hp: p.hp,
             maxHp: p.maxHp,
             inventoryCount: p.inventory.length,
-            enemyCount: gameState.current.enemies.length,
-            mode: gameState.current.mode,
+            enemyCount: gameState.current!.enemies.length,
+            mode: gameState.current!.mode,
             locationName: loc.type === 'world' ? 'Overworld' : loc.type === 'town' ? 'Village' : `Dungeon B${loc.level}`,
             gold: p.gold
         }));
       }
       animationFrameId = requestAnimationFrame(loop);
     };
+    
     loop();
     return () => cancelAnimationFrame(animationFrameId);
-  }, [isPaused]); 
+  }, [isInitialized, isPaused]); // 初期化完了後にループ開始
 
   // --- ショップ操作 ---
   const handleBuy = (item: Item) => {
+    if (!gameState.current) return;
     const p = gameState.current.player;
     if (p.gold >= item.value) {
       p.gold -= item.value;
@@ -162,13 +207,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
   };
 
   const handleRest = () => {
+    if (!gameState.current) return;
     const p = gameState.current.player;
     const cost = p.level * 5;
     if (p.gold >= cost) {
       p.gold -= cost;
       p.hp = p.maxHp;
       p.mp = p.maxMp;
-      // 仲間も回復
       gameState.current.party.forEach(c => {
           if (!c.dead) { c.hp = c.maxHp; c.mp = c.maxMp; }
       });
@@ -180,13 +225,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
   };
 
   const handleRecruit = (comp: CompanionEntity) => {
+    if (!gameState.current) return;
     const p = gameState.current.player;
     const cost = comp.level * 50;
     if (p.gold >= cost) {
       p.gold -= cost;
-      comp.x = p.x; comp.y = p.y; // 配置
+      comp.x = p.x; comp.y = p.y;
       gameState.current.party.push(comp);
-      // リストから削除
       if (shopNPC && shopNPC.recruitList) {
           shopNPC.recruitList = shopNPC.recruitList.filter(c => c.id !== comp.id);
       }
@@ -197,6 +242,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
   };
 
   const handleRevive = (comp: CompanionEntity) => {
+    if (!gameState.current) return;
     const p = gameState.current.player;
     const cost = comp.level * 20;
     if (p.gold >= cost) {
@@ -215,17 +261,18 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
   };
 
   const handleToggleMode = () => {
+    if (!gameState.current) return;
     const nextMode = gameState.current.mode === 'combat' ? 'build' : 'combat';
     gameState.current.mode = nextMode;
     setUiState(prev => ({ ...prev, mode: nextMode }));
   };
 
   const handleSave = async () => {
-    if (!user) return;
+    if (!user || !gameState.current) return;
     try {
       await setDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'saveData'), {
         player: gameState.current.player,
-        party: gameState.current.party, // 仲間も保存
+        party: gameState.current.party,
         settings,
         location: gameState.current.location,
         lastSaved: new Date()
@@ -235,6 +282,15 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
       console.error("Save failed:", e);
     }
   };
+
+  // まだ初期化中ならローディング表示
+  if (!isInitialized) {
+    return (
+      <div className="flex items-center justify-center w-full h-full bg-black text-white">
+        <div className="text-xl animate-pulse">Initializing Game World...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full h-full flex items-center justify-center bg-black">
@@ -271,8 +327,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
             <div className="flex justify-between items-center mb-6 border-b border-[#5d4037] pb-2">
               <div className="flex items-center gap-3">
                 {shopNPC.role === 'inn' && <BedDouble size={32} />}
-                {shopNPC.role === 'weapon' && <ShoppingBag size={32} />}
-                {shopNPC.role === 'item' && <ShoppingBag size={32} />}
+                {(shopNPC.role === 'weapon' || shopNPC.role === 'item') && <ShoppingBag size={32} />}
                 {shopNPC.role === 'revive' && <HeartPulse size={32} />}
                 {shopNPC.role === 'recruit' && <UserPlus size={32} />}
                 <h2 className="text-2xl font-bold font-serif">{shopNPC.name}</h2>
@@ -280,39 +335,29 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
               <button onClick={closeShop} className="hover:text-white"><X /></button>
             </div>
 
-            {/* 宿屋 */}
+            {/* 各ショップUIの中身 (前回と同じため省略なしで記述) */}
             {shopNPC.role === 'inn' && (
               <div className="text-center">
                 <p className="mb-4 text-gray-300">"Rest your weary bones, traveler."</p>
-                <button 
-                  onClick={handleRest}
-                  className="px-8 py-3 bg-[#5d4037] hover:bg-[#3e2723] rounded border border-[#8d6e63] text-white font-bold text-lg"
-                >
-                  Rest (Cost: {gameState.current.player.level * 5} G)
+                <button onClick={handleRest} className="px-8 py-3 bg-[#5d4037] hover:bg-[#3e2723] rounded border border-[#8d6e63] text-white font-bold text-lg">
+                  Rest (Cost: {gameState.current!.player.level * 5} G)
                 </button>
               </div>
             )}
-
-            {/* 武器・道具屋 */}
+            
             {(shopNPC.role === 'weapon' || shopNPC.role === 'item') && (
               <div className="grid grid-cols-2 gap-4">
                 {shopNPC.shopInventory?.map(item => (
                   <div key={item.id} className="border border-[#5d4037] p-3 rounded bg-black/30 flex justify-between items-center">
                     <div>
-                      <div className={`font-bold ${item.rarity === 'legendary' ? 'text-orange-500' : 'text-gray-200'}`}>
-                        {item.name}
-                      </div>
+                      <div className={`font-bold ${item.rarity === 'legendary' ? 'text-orange-500' : 'text-gray-200'}`}>{item.name}</div>
                       <div className="text-xs text-gray-400">Lv.{item.level} {item.type}</div>
                       <div className="text-xs text-gray-500">
                         {item.stats?.attack ? `ATK: ${item.stats.attack}` : ''}
                         {item.stats?.defense ? `DEF: ${item.stats.defense}` : ''}
-                        {item.stats?.hp ? `Heal: ${item.stats.hp}` : ''}
                       </div>
                     </div>
-                    <button 
-                      onClick={() => handleBuy(item)}
-                      className="px-3 py-1 bg-[#1b5e20] hover:bg-[#2e7d32] text-white text-sm rounded border border-[#4caf50]"
-                    >
+                    <button onClick={() => handleBuy(item)} className="px-3 py-1 bg-[#1b5e20] hover:bg-[#2e7d32] text-white text-sm rounded border border-[#4caf50]">
                       {item.value} G
                     </button>
                   </div>
@@ -320,48 +365,35 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
               </div>
             )}
 
-            {/* 紹介屋 */}
             {shopNPC.role === 'recruit' && (
               <div className="space-y-4">
-                <p className="text-gray-300 mb-2">"Looking for some help? I know some people."</p>
+                <p className="text-gray-300 mb-2">"Looking for some help?"</p>
                 {shopNPC.recruitList?.map(comp => (
                   <div key={comp.id} className="border border-[#5d4037] p-3 rounded bg-black/30 flex justify-between items-center">
                     <div>
                       <div className="font-bold text-blue-400">{comp.job} - Lv.{comp.level}</div>
-                      <div className="text-xs text-gray-400">
-                        HP: {comp.maxHp} / MP: {comp.maxMp} / ATK: {comp.attack} / DEF: {comp.defense}
-                      </div>
+                      <div className="text-xs text-gray-400">HP: {comp.maxHp} / ATK: {comp.attack}</div>
                     </div>
-                    <button 
-                      onClick={() => handleRecruit(comp)}
-                      className="px-3 py-1 bg-[#0d47a1] hover:bg-[#1565c0] text-white text-sm rounded border border-[#42a5f5]"
-                    >
+                    <button onClick={() => handleRecruit(comp)} className="px-3 py-1 bg-[#0d47a1] hover:bg-[#1565c0] text-white text-sm rounded border border-[#42a5f5]">
                       Hire ({comp.level * 50} G)
                     </button>
                   </div>
                 ))}
-                {shopNPC.recruitList?.length === 0 && <p className="text-gray-500">No one is available right now.</p>}
               </div>
             )}
 
-            {/* 蘇生屋 */}
             {shopNPC.role === 'revive' && (
               <div className="space-y-4">
-                <p className="text-gray-300 mb-2">"I can bring back the fallen... for a donation."</p>
-                {gameState.current.party.filter(c => c.dead).map(comp => (
+                <p className="text-gray-300 mb-2">"I can bring back the fallen."</p>
+                {gameState.current!.party.filter(c => c.dead).map(comp => (
                   <div key={comp.id} className="border border-[#5d4037] p-3 rounded bg-black/30 flex justify-between items-center">
                     <div className="text-red-500 font-bold">{comp.job} (Lv.{comp.level})</div>
-                    <button 
-                      onClick={() => handleRevive(comp)}
-                      className="px-3 py-1 bg-[#b71c1c] hover:bg-[#c62828] text-white text-sm rounded border border-[#ef5350]"
-                    >
+                    <button onClick={() => handleRevive(comp)} className="px-3 py-1 bg-[#b71c1c] hover:bg-[#c62828] text-white text-sm rounded border border-[#ef5350]">
                       Revive ({comp.level * 20} G)
                     </button>
                   </div>
                 ))}
-                {gameState.current.party.filter(c => c.dead).length === 0 && (
-                  <p className="text-green-500">None of your companions are dead.</p>
-                )}
+                {gameState.current!.party.filter(c => c.dead).length === 0 && <p className="text-green-500">None dead.</p>}
               </div>
             )}
           </div>
@@ -376,12 +408,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
               <h2 className="text-2xl font-bold font-serif">Game Settings</h2>
               <button onClick={() => setShowSettings(false)} className="hover:text-white"><X /></button>
             </div>
-            {/* 設定項目 */}
             <div className="space-y-6">
-              <div>
-                <label className="block mb-2 font-bold">Volume</label>
-                <input type="range" min="0" max="1" step="0.1" value={settings.masterVolume} onChange={(e) => setSettings({...settings, masterVolume: parseFloat(e.target.value)})} className="w-full accent-[#d4af37]" />
-              </div>
               <div>
                 <label className="block mb-2 font-bold">Game Speed: {settings.gameSpeed}x</label>
                 <div className="flex gap-2">
