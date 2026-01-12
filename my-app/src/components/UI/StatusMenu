@@ -10,10 +10,7 @@ interface StatusMenuProps {
 export const StatusMenu: React.FC<StatusMenuProps> = ({ player, companions, onClose }) => {
   const [selectedTab, setSelectedTab] = useState<'player' | number>('player');
 
-  // 表示するエンティティ（プレイヤー または 仲間）を取得
   const currentEntity = selectedTab === 'player' ? player : companions[selectedTab];
-
-  // 経験値の割合計算
   const expPercent = Math.min(100, (currentEntity.exp / currentEntity.maxExp) * 100);
 
   return (
