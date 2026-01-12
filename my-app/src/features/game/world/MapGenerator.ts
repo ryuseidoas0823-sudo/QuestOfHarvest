@@ -1,7 +1,8 @@
 import { GAME_CONFIG } from '../../../assets/constants';
-import { Tile, TileType, Chest, NPCEntity, Item } from '../types';
+import { Tile, TileType, Chest, NPCEntity, Item, EnemyEntity } from '../types';
 import { generateRandomItem } from '../lib/ItemGenerator';
 import { generateCompanion } from '../lib/CompanionGenerator';
+import { generateEnemy } from '../lib/EnemyGenerator'; // 変更
 
 interface MapResult {
   map: Tile[][];
@@ -11,9 +12,14 @@ interface MapResult {
   bossSpawn?: { x: number, y: number };
 }
 
+// ... generateWorldMap, generateTownMap は既存のまま ...
+// (省略: 上記関数に変更はありませんが、importの変更だけ反映してください)
+
+// ワールドマップ生成 (省略なし版が必要であれば言ってください、ここではimport変更が主)
+// ...
+
 /**
  * ワールドマップ生成
- * mapsSinceLastTown: 最後の村からの経過マップ数
  */
 export const generateWorldMap = (mapsSinceLastTown: number = 0): MapResult => {
   const { MAP_WIDTH, MAP_HEIGHT, TILE_SIZE } = GAME_CONFIG;
@@ -78,14 +84,11 @@ export const generateWorldMap = (mapsSinceLastTown: number = 0): MapResult => {
   }
 
   // 5. 村の配置判定
-  // 最初のマップ(mapsSinceLastTown < 0 または特定フラグ)は必ず配置
-  // その後は2-5マップごとにランダム
   let placeTown = false;
-  if (mapsSinceLastTown === 0) { // 初回
+  if (mapsSinceLastTown === 0) {
     placeTown = true;
   } else if (mapsSinceLastTown >= 2) {
-    // 2マップ目以降から確率発生、5マップ目で確定
-    const chance = (mapsSinceLastTown - 1) * 0.25; // 2->0.25, 3->0.5, 4->0.75, 5->1.0
+    const chance = (mapsSinceLastTown - 1) * 0.25;
     if (Math.random() < chance) placeTown = true;
   }
 
@@ -99,15 +102,12 @@ export const generateWorldMap = (mapsSinceLastTown: number = 0): MapResult => {
   return { map, chests, npcs: [], spawnPoint };
 };
 
-/**
- * 安全な村マップ生成
- */
+// ... generateTownMap, placeSpecialTile は変更なし ...
 export const generateTownMap = (playerLevel: number): MapResult => {
   const { MAP_WIDTH, MAP_HEIGHT, TILE_SIZE } = GAME_CONFIG;
   const map: Tile[][] = [];
   const npcs: NPCEntity[] = [];
 
-  // 全体を壁（柵）で囲う
   for (let y = 0; y < MAP_HEIGHT; y++) {
     const row: Tile[] = [];
     for (let x = 0; x < MAP_WIDTH; x++) {
@@ -120,7 +120,6 @@ export const generateTownMap = (playerLevel: number): MapResult => {
     map.push(row);
   }
 
-  // 中心部を舗装
   const cx = Math.floor(MAP_WIDTH / 2);
   const cy = Math.floor(MAP_HEIGHT / 2);
   for(let y = cy - 5; y <= cy + 5; y++) {
@@ -129,10 +128,8 @@ export const generateTownMap = (playerLevel: number): MapResult => {
     }
   }
 
-  // 出口ポータル
   map[MAP_HEIGHT-2][cx].type = 'portal_out';
   
-  // NPC配置（各役割を持ったNPCを作成）
   const roles = [
     { role: 'inn', name: 'Innkeeper', x: cx - 4, y: cy - 4 },
     { role: 'weapon', name: 'Blacksmith', x: cx + 4, y: cy - 4 },
@@ -142,22 +139,19 @@ export const generateTownMap = (playerLevel: number): MapResult => {
   ];
 
   roles.forEach(r => {
-    // 店の床
     for(let y=r.y-1; y<=r.y+1; y++) {
       for(let x=r.x-1; x<=r.x+1; x++) {
         map[y][x].type = 'shop_floor';
       }
     }
 
-    // 商品生成
     let inventory: Item[] = [];
     let recruits: any[] = [];
 
     if (r.role === 'weapon') {
-      // レベル±10の装備
       for(let i=0; i<8; i++) {
         const itemLevel = Math.max(1, playerLevel + Math.floor(Math.random() * 21) - 10);
-        inventory.push(generateRandomItem(itemLevel)); // 武器・防具のみにフィルタリングすべきだが簡易実装
+        inventory.push(generateRandomItem(itemLevel)); 
       }
       inventory = inventory.filter(i => i.type === 'weapon' || i.type === 'armor');
     } else if (r.role === 'item') {
@@ -192,7 +186,6 @@ export const generateTownMap = (playerLevel: number): MapResult => {
   return { map, chests: [], npcs, spawnPoint: { x: cx * TILE_SIZE, y: cy * TILE_SIZE } };
 };
 
-// ヘルパー: タイル配置
 const placeSpecialTile = (map: Tile[][], spawn: {x:number,y:number}, type: any, metaGen: (dist:number)=>any) => {
   const { MAP_WIDTH, MAP_HEIGHT, TILE_SIZE } = GAME_CONFIG;
   let dx, dy, dist;
@@ -210,13 +203,11 @@ const placeSpecialTile = (map: Tile[][], spawn: {x:number,y:number}, type: any, 
   }
 };
 
-// ダンジョン生成（既存のまま、npcs追加）
+// generateDungeonMap
 export const generateDungeonMap = (level: number, maxDepth: number): MapResult => {
   const { MAP_WIDTH, MAP_HEIGHT, TILE_SIZE } = GAME_CONFIG;
   const map: Tile[][] = [];
-  // ... (既存のダンジョン生成ロジックは長いので省略、構成は同じでnpcs: []を返す)
-  
-  // 簡易再実装（コンテキスト維持のため）
+
   for (let y = 0; y < MAP_HEIGHT; y++) {
     const row: Tile[] = [];
     for (let x = 0; x < MAP_WIDTH; x++) { row.push({ x, y, type: 'wall', solid: true }); }
