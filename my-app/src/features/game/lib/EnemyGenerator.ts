@@ -12,6 +12,10 @@ export const generateEnemy = (x: number, y: number, level: number, isBoss: boole
   const baseHp = 30 + level * 10;
   const hp = Math.floor(baseHp * (isBoss ? 5 : 1) * diffConfig.hpMult);
 
+  // 速度調整: プレイヤー速度(2)に合わせて調整
+  // 以前は 2 + Math.random() 程度だったものを、全体的に半分程度に落とす
+  const baseSpeed = 1.0 + Math.random() * 0.5; // 1.0 ~ 1.5 程度
+
   return {
     id: `enemy_${crypto.randomUUID()}`,
     type: isBoss ? 'boss' : 'enemy',
@@ -26,12 +30,12 @@ export const generateEnemy = (x: number, y: number, level: number, isBoss: boole
     maxHp: hp,
     mp: 0,
     maxMp: 0,
-    speed: 2 + Math.random(),
+    speed: isBoss ? baseSpeed * 0.8 : baseSpeed, // ボスは少し遅く
     dead: false,
     stats: {
       attack: 5 + level * 2,
       defense: level,
-      speed: 2,
+      speed: baseSpeed,
       magic: 0
     },
     // 以下、EnemyEntityに必要なプロパティを追加
@@ -40,8 +44,11 @@ export const generateEnemy = (x: number, y: number, level: number, isBoss: boole
     exp: 10 * level * diffConfig.expMult,
     dropRate: 0.2 * diffConfig.dropRateMult,
     race: 'Goblin', // 仮
+    variant: 'Normal', // 仮
+    rank: isBoss ? 'Boss' : 'Normal', // 仮
     behavior: 'aggressive',
+    // 攻撃速度なども遅くする場合は調整
     attackRange: 40,
-    attackSpeed: 1.5
+    attackSpeed: 1.5 // 秒間攻撃回数的な意味合いなら減らす、間隔(ms)なら増やす。ここではGameLoopの実装依存だが、一旦そのまま
   };
 };
