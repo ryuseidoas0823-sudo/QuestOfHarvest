@@ -1,5 +1,5 @@
 import { GAME_CONFIG } from '../../../assets/constants';
-import { Entity, Tile } from '../types';
+import { Entity, Tile, AttackShape } from '../types';
 
 /**
  * 2つのエンティティ（矩形）間の衝突判定
@@ -14,64 +14,88 @@ export const checkCollision = (rect1: Entity, rect2: Entity): boolean => {
 };
 
 /**
- * エンティティとマップ（壁など）との衝突判定
- * 衝突がある場合は true を返します
+ * 攻撃判定（範囲チェック）
+ * @param attacker 攻撃者
+ * @param target 対象
+ * @param shape 攻撃形状 ('arc' | 'line')
+ * @param range 射程 (px)
+ * @param width 幅 (px) または 角度 (度)
+ * @param angle 攻撃方向 (ラジアン)
  */
+export const checkAttackHit = (
+  attacker: Entity,
+  target: Entity,
+  shape: AttackShape,
+  range: number,
+  width: number, // Line: width(px), Arc: angle(deg)
+  angle: number
+): boolean => {
+  const ax = attacker.x + attacker.width / 2;
+  const ay = attacker.y + attacker.height / 2;
+  const tx = target.x + target.width / 2;
+  const ty = target.y + target.height / 2;
+
+  const dx = tx - ax;
+  const dy = ty - ay;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
+  if (dist > range) return false;
+
+  if (shape === 'arc') {
+    // 扇状判定
+    const targetAngle = Math.atan2(dy, dx);
+    let diff = targetAngle - angle;
+    // 角度差を -PI ~ PI に正規化
+    while (diff <= -Math.PI) diff += Math.PI * 2;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    
+    const halfAngle = (width * Math.PI / 180) / 2;
+    return Math.abs(diff) <= halfAngle;
+  } else {
+    // 直線（矩形）判定: 回転した矩形と円(点)の判定は重いので、簡易的に
+    // 「距離内」かつ「攻撃ベクトルへの射影距離が幅半分以内」で判定
+    // 攻撃方向ベクトル
+    const dirX = Math.cos(angle);
+    const dirY = Math.sin(angle);
+    
+    // ターゲットへのベクトルと攻撃方向の内積 (前方距離)
+    const dot = dx * dirX + dy * dirY;
+    if (dot < 0 || dot > range) return false;
+
+    // 外積 (横ズレ距離) 2D外積: x1*y2 - x2*y1
+    const cross = dx * dirY - dy * dirX;
+    return Math.abs(cross) <= width / 2;
+  }
+};
+
+// ... existing map collision functions ...
 export const checkMapCollision = (entity: Entity, map: Tile[][]): boolean => {
   const { TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } = GAME_CONFIG;
-
-  // エンティティの4隅の座標をチェック
   const corners = [
-    { x: entity.x, y: entity.y }, // 左上
-    { x: entity.x + entity.width, y: entity.y }, // 右上
-    { x: entity.x, y: entity.y + entity.height }, // 左下
-    { x: entity.x + entity.width, y: entity.y + entity.height }, // 右下
+    { x: entity.x, y: entity.y },
+    { x: entity.x + entity.width, y: entity.y },
+    { x: entity.x, y: entity.y + entity.height },
+    { x: entity.x + entity.width, y: entity.y + entity.height },
   ];
 
   for (const corner of corners) {
     const tileX = Math.floor(corner.x / TILE_SIZE);
     const tileY = Math.floor(corner.y / TILE_SIZE);
-
-    // マップ範囲外のチェック
-    if (tileY < 0 || tileY >= MAP_HEIGHT || tileX < 0 || tileX >= MAP_WIDTH) {
-      return true; // 画面外は衝突扱い
-    }
-
-    // タイルの衝突属性チェック
-    if (map[tileY][tileX].solid) {
-      return true;
-    }
+    if (tileY < 0 || tileY >= MAP_HEIGHT || tileX < 0 || tileX >= MAP_WIDTH) return true;
+    if (map[tileY][tileX].solid) return true;
   }
-
   return false;
 };
 
-/**
- * 移動を試行し、衝突があれば補正するか、元の位置に戻す
- * シンプルな実装として、移動後に衝突したら移動をキャンセルするロジックを返します
- */
-export const tryMove = (
-  entity: Entity, 
-  dx: number, 
-  dy: number, 
-  map: Tile[][]
-): { x: number, y: number } => {
+export const tryMove = (entity: Entity, dx: number, dy: number, map: Tile[][]): { x: number, y: number } => {
   const nextX = entity.x + dx;
   const nextY = entity.y + dy;
   
-  // X軸方向の移動をテスト
-  const testEntityX = { ...entity, x: nextX };
   let finalX = entity.x;
-  if (!checkMapCollision(testEntityX, map)) {
-    finalX = nextX;
-  }
+  if (!checkMapCollision({ ...entity, x: nextX }, map)) finalX = nextX;
 
-  // Y軸方向の移動をテスト
-  const testEntityY = { ...entity, x: finalX, y: nextY }; // Xは確定した値を使う
   let finalY = entity.y;
-  if (!checkMapCollision(testEntityY, map)) {
-    finalY = nextY;
-  }
+  if (!checkMapCollision({ ...entity, x: finalX, y: nextY }, map)) finalY = nextY;
 
   return { x: finalX, y: finalY };
 };
