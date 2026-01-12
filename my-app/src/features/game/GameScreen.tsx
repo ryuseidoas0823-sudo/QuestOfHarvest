@@ -9,16 +9,14 @@ import { StatusMenu } from '../../components/UI/StatusMenu';
 import { AuthOverlay } from '../auth/AuthOverlay';
 import { getAuth, onAuthStateChanged, User } from 'firebase/auth';
 import { generateWorldChunk } from './world/MapGenerator';
-import { generatePlayer } from './entities/Player';
+import { createPlayer } from './entities/Player';
 
 export const GameScreen: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>();
   
-  // ゲームのメイン状態はRefで管理（毎フレームのReactレンダリングを回避するため）
   const gameStateRef = useRef<GameState | null>(null);
 
-  // UI表示用のState（HPやフロアなど、変化した時だけ更新）
   const [uiState, setUiState] = useState<{
     playerHp: number;
     playerMaxHp: number;
@@ -34,10 +32,8 @@ export const GameScreen: React.FC = () => {
   const [showStatus, setShowStatus] = useState(false);
   const [user, setUser] = useState<User | null>(null);
 
-  // 入力フック
   const { keys, mouse, handlers } = useGameInput();
 
-  // Auth Listener
   useEffect(() => {
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -46,17 +42,14 @@ export const GameScreen: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // 初期化とゲームループ
   useEffect(() => {
     if (!canvasRef.current) return;
     const ctx = canvasRef.current.getContext('2d');
     if (!ctx) return;
 
-    // 初期状態の生成
     if (!gameStateRef.current) {
       const initialMap = generateWorldChunk(0, 0);
-      const initialPlayer = generatePlayer('Hero'); // 仮のプレイヤー生成
-      // プレイヤー位置をスポーンポイントに
+      const initialPlayer = createPlayer();
       initialPlayer.x = initialMap.spawnPoint.x;
       initialPlayer.y = initialMap.spawnPoint.y;
 
@@ -65,7 +58,7 @@ export const GameScreen: React.FC = () => {
         gameTime: 0,
         camera: { x: 0, y: 0 },
         player: initialPlayer,
-        party: [], // 初期は空、必要なら追加
+        party: [],
         companions: [],
         map: initialMap.map,
         chests: initialMap.chests,
@@ -85,25 +78,14 @@ export const GameScreen: React.FC = () => {
       if (gameStateRef.current && !gameStateRef.current.isPaused) {
         const state = gameStateRef.current;
 
-        // 入力オブジェクトの整形
         const inputState = {
           keys: keys.current,
           mouse: mouse.current
         };
 
-        // 更新処理 (Stateを直接変更)
         updateGame(state, inputState, false);
-
-        // 描画処理
         renderGame(ctx, state, { mouse: mouse.current });
 
-        // UI同期 (簡易的な最適化: 必要な値だけ比較してState更新したいが、
-        // ここでは60FPSでReact Stateを更新すると重いので、
-        // 変化があった場合や一定間隔で更新するのが望ましい。
-        // 今回はとりあえずrequestAnimationFrameごとにチェックして変化あれば更新する形にする)
-        
-        // 注: 厳密な比較はコストがかかるので、重要な値の変更のみ検知してUIを更新する
-        // 実際にはカスタムイベントや、別のRefで前回値を保持して比較するのが良い
         setUiState(prev => {
           if (!prev || 
               prev.playerHp !== state.player.hp || 
@@ -133,18 +115,8 @@ export const GameScreen: React.FC = () => {
     return () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
-  }, []); // 初回のみ実行
+  }, []);
 
-  // Status Menu Toggle
-  // useGameInput内ではキーイベントをRefに格納しているだけなので、
-  // ここでキーの立ち上がりを検知するか、GameLoop内で検知する必要がある。
-  // 簡易的に、GameLoop内でMENUキーを処理するのが一般的だが、
-  // React側のState(showStatus)を変更したいので、キー監視をここで行うか、
-  // useGameInputを拡張する必要がある。
-  // 今回は簡易的にキーダウンイベントを別途リッスンするか、
-  // updateGame内でフラグを立ててUI側で検知するのが良いが、
-  // 既存のuseGameInputの仕様上、直接イベントリスナを追加する。
-  
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' || e.key === 'm' || e.key === 'M') {
@@ -159,7 +131,7 @@ export const GameScreen: React.FC = () => {
   return (
     <div 
       className="relative w-full h-full bg-black overflow-hidden flex items-center justify-center outline-none"
-      {...handlers} // マウスイベントをDivにバインド
+      {...handlers}
       tabIndex={0}
     >
       <canvas
@@ -175,10 +147,8 @@ export const GameScreen: React.FC = () => {
         }}
       />
 
-      {/* UI Overlays */}
       {gameStateRef.current && uiState && (
         <>
-          {/* HUDにはRefではなくReact Stateから値を渡す */}
           <HUD 
             player={{ 
               ...gameStateRef.current.player, 
@@ -204,7 +174,6 @@ export const GameScreen: React.FC = () => {
         </>
       )}
 
-      {/* Dialog Overlay */}
       {uiState?.dialogue && (
         <div className="absolute inset-x-0 bottom-0 p-4 bg-slate-900/90 border-t-2 border-slate-600 text-white min-h-[150px] animate-slide-up z-50 pointer-events-none">
           <div className="max-w-4xl mx-auto flex gap-4 pointer-events-auto">
@@ -218,7 +187,6 @@ export const GameScreen: React.FC = () => {
         </div>
       )}
 
-      {/* Auth Overlay (Login Prompt) */}
       {!user && <AuthOverlay />}
 
     </div>
