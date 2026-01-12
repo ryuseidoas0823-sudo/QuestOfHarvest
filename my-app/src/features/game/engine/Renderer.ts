@@ -14,8 +14,6 @@ const drawCharacter = (
   h: number,
   time: number
 ) => {
-  // ... (既存のキャラクター描画ロジック)
-  // ここは変更せず、drawResourceNodeを新規追加して呼び分ける
   let drawX = x;
   let drawY = y;
   
@@ -126,8 +124,16 @@ const drawResourceNode = (ctx: CanvasRenderingContext2D, res: ResourceNode, x: n
   }
 };
 
-const drawWeapon = (ctx: CanvasRenderingContext2D, category: WeaponCategory, x: number, y: number, w: number, h: number, isAttacking?: boolean, angle?: number) => {
-  // ... (既存のdrawWeaponロジック)
+const drawWeapon = (
+  ctx: CanvasRenderingContext2D,
+  category: WeaponCategory,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  isAttacking?: boolean,
+  angle?: number
+) => {
   ctx.save();
   const cx = x + w / 2;
   const cy = y + h / 2;
@@ -144,7 +150,6 @@ const drawWeapon = (ctx: CanvasRenderingContext2D, category: WeaponCategory, x: 
   const wx = x + w * 0.5 + offsetX;
   const wy = y + h * 0.3 + offsetY;
 
-  // Pickaxeの描画追加
   if (category === 'Pickaxe') {
     ctx.fillStyle = '#5d4037'; // Handle
     ctx.fillRect(wx, wy - 15, 3, 20);
@@ -159,9 +164,19 @@ const drawWeapon = (ctx: CanvasRenderingContext2D, category: WeaponCategory, x: 
     ctx.fillStyle = '#b0bec5'; ctx.fillRect(wx, wy - 15, 4, 15);
     ctx.fillStyle = '#5d4037'; ctx.fillRect(wx, wy, 4, 6);
     ctx.fillStyle = '#ffd700'; ctx.fillRect(wx - 4, wy - 2, 12, 2);
-  } 
-  // ... (他の武器種も同様、省略せず必要なら記述するが、ここでは簡略化のため既存ロジックが生きている前提)
-  // もし完全なコードが必要なら前のRenderer.tsを参照してマージする
+  } else if (category === 'Spear') {
+    ctx.fillStyle = '#8d6e63'; ctx.fillRect(wx, wy - 20, 2, 25);
+    ctx.fillStyle = '#b0bec5'; ctx.beginPath(); ctx.moveTo(wx + 1, wy - 20); ctx.lineTo(wx - 2, wy - 25); ctx.lineTo(wx + 4, wy - 25); ctx.fill();
+  } else if (category === 'Axe') {
+    ctx.fillStyle = '#8d6e63'; ctx.fillRect(wx, wy - 15, 3, 20);
+    ctx.fillStyle = '#78909c'; ctx.beginPath(); ctx.arc(wx + 1, wy - 12, 8, 0, Math.PI, true); ctx.fill();
+  } else if (category === 'Hammer') {
+    ctx.fillStyle = '#5d4037'; ctx.fillRect(wx, wy - 15, 3, 20);
+    ctx.fillStyle = '#424242'; ctx.fillRect(wx - 5, wy - 18, 13, 8);
+  } else if (category === 'Dagger') {
+    ctx.fillStyle = '#b0bec5'; ctx.fillRect(wx, wy - 8, 3, 8);
+    ctx.fillStyle = '#5d4037'; ctx.fillRect(wx, wy, 3, 4);
+  }
   
   ctx.restore();
 };
@@ -205,21 +220,33 @@ export const renderGame = (
           case 'grass': ctx.fillStyle = THEME.colors.grass; break;
           case 'dirt': ctx.fillStyle = THEME.colors.dirt; break;
           case 'wall': ctx.fillStyle = THEME.colors.wall; break;
-          case 'mine_entrance': ctx.fillStyle = '#3e2723'; break; // 鉱山入り口色
-          // ... 他の色設定
+          case 'mine_entrance': ctx.fillStyle = '#3e2723'; break;
+          case 'portal_out': ctx.fillStyle = '#e91e63'; break; // ポータルを目立つ色に
           default: ctx.fillStyle = '#222';
         }
         ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
         
+        // 特殊タイルのアイコン描画
         if (tile.type === 'mine_entrance') {
-          ctx.fillStyle = '#fff'; ctx.font = '20px sans-serif'; ctx.textAlign = 'center';
-          ctx.fillText('M', px + TILE_SIZE/2, py + TILE_SIZE/2 + 7);
+          ctx.fillStyle = '#fff'; ctx.font = `${TILE_SIZE*0.7}px sans-serif`; ctx.textAlign = 'center';
+          ctx.fillText('⛏️', px + TILE_SIZE/2, py + TILE_SIZE/2 + TILE_SIZE*0.2);
+        } else if (tile.type === 'dungeon_entrance') {
+          ctx.fillStyle = '#fff'; ctx.font = `${TILE_SIZE*0.7}px sans-serif`; ctx.textAlign = 'center';
+          ctx.fillText('💀', px + TILE_SIZE/2, py + TILE_SIZE/2 + TILE_SIZE*0.2);
+        } else if (tile.type === 'town_entrance') {
+          ctx.fillStyle = '#fff'; ctx.font = `${TILE_SIZE*0.7}px sans-serif`; ctx.textAlign = 'center';
+          ctx.fillText('🏠', px + TILE_SIZE/2, py + TILE_SIZE/2 + TILE_SIZE*0.2);
+        } else if (tile.type === 'portal_out') {
+          ctx.fillStyle = '#fff'; ctx.font = `${TILE_SIZE*0.7}px sans-serif`; ctx.textAlign = 'center';
+          ctx.fillText('🚪', px + TILE_SIZE/2, py + TILE_SIZE/2 + TILE_SIZE*0.2);
+        } else if (tile.type === 'stairs_down') {
+          ctx.fillStyle = '#fff'; ctx.font = `${TILE_SIZE*0.7}px sans-serif`; ctx.textAlign = 'center';
+          ctx.fillText('⬇️', px + TILE_SIZE/2, py + TILE_SIZE/2 + TILE_SIZE*0.2);
         }
-        // ... 他の入り口文字
       }
     }
 
-    // 資源描画 (Resource Nodes)
+    // 資源描画
     if (state.resources) {
       state.resources.forEach(res => {
         if (res.dead) return;
@@ -228,9 +255,8 @@ export const renderGame = (
     }
 
     // オブジェクト、敵、プレイヤー描画
-    // ... (既存の描画ロジック)
-    if (state.chests) state.chests.forEach(c => { /*...*/ ctx.fillStyle='gold'; ctx.fillRect(c.x+10,c.y+10,20,20); }); // 簡易
-    if (state.droppedItems) state.droppedItems.forEach(d => { /*...*/ ctx.fillStyle='cyan'; ctx.fillRect(d.x+15,d.y+15,10,10); }); // 簡易
+    if (state.chests) state.chests.forEach(c => { ctx.fillStyle='gold'; ctx.fillRect(c.x+TILE_SIZE*0.2,c.y+TILE_SIZE*0.2,TILE_SIZE*0.6,TILE_SIZE*0.6); });
+    if (state.droppedItems) state.droppedItems.forEach(d => { ctx.fillStyle='cyan'; ctx.fillRect(d.x+TILE_SIZE*0.3,d.y+TILE_SIZE*0.3,TILE_SIZE*0.4,TILE_SIZE*0.4); });
 
     if (state.npcs) state.npcs.forEach(n => drawCharacter(ctx, n, n.x, n.y, n.width, n.height, time));
     if (state.enemies) state.enemies.forEach(e => drawCharacter(ctx, e, e.x, e.y, e.width, e.height, time));
@@ -244,13 +270,34 @@ export const renderGame = (
     ctx.globalAlpha = 1.0;
 
     // マウスカーソル (攻撃範囲)
-    // ... (既存ロジック)
+    if (state.mode === 'combat' && state.player?.equipment?.mainHand?.weaponStats) {
+      const weapon = state.player.equipment.mainHand.weaponStats;
+      ctx.strokeStyle = 'rgba(255, 0, 0, 0.3)';
+      ctx.lineWidth = 1;
+      const px = state.player.x + state.player.width / 2;
+      const py = state.player.y + state.player.height / 2;
+      const mx = input.mouse.x + camX;
+      const my = input.mouse.y + camY;
+      const angle = Math.atan2(my - py, mx - px);
+      const range = weapon.range * TILE_SIZE;
+
+      ctx.beginPath();
+      if (weapon.shape === 'line') {
+        ctx.moveTo(px, py);
+        ctx.lineTo(px + Math.cos(angle) * range, py + Math.sin(angle) * range);
+      } else {
+        const halfAngle = (weapon.width * Math.PI / 180) / 2;
+        ctx.arc(px, py, range, angle - halfAngle, angle + halfAngle);
+        ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+    }
 
     ctx.restore();
     
     // UI Overlay
     ctx.fillStyle = '#fff'; ctx.font = '20px serif'; ctx.textAlign = 'right';
-    const locName = state.location.type === 'mine' ? `Mine B${state.location.level}` : state.location.type === 'world' ? 'Overworld' : 'Village';
+    const locName = state.location.type === 'mine' ? `Mine B${state.location.level}` : state.location.type === 'world' ? 'Overworld' : state.location.type === 'dungeon' ? `Dungeon B${state.location.level}` : 'Village';
     ctx.fillText(locName, width - 20, 30);
 
   } catch (error) {
