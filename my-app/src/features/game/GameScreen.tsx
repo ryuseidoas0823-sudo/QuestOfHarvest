@@ -7,10 +7,10 @@ import { updateGame } from './engine/GameLoop';
 import { HUD } from '../../components/UI/HUD';
 import { StatusMenu } from '../../components/UI/StatusMenu';
 import { JobSelectionScreen } from '../../components/UI/JobSelectionScreen'; 
-import { CraftingMenu } from '../../components/UI/CraftingMenu'; // 追加
+import { CraftingMenu } from '../../components/UI/CraftingMenu';
 import { AuthOverlay } from '../auth/AuthOverlay';
 import { getAuth, onAuthStateChanged, User } from 'firebase/auth';
-import { generateWorldChunk, generateTownMap } from './world/MapGenerator';
+import { generateTownMap } from './world/MapGenerator';
 import { createPlayer } from './entities/Player';
 
 export const GameScreen: React.FC = () => {
@@ -19,7 +19,6 @@ export const GameScreen: React.FC = () => {
   
   const gameStateRef = useRef<GameState | null>(null);
 
-  // UI State
   const [uiState, setUiState] = useState<{
     playerHp: number;
     playerMaxHp: number;
@@ -30,7 +29,7 @@ export const GameScreen: React.FC = () => {
     playerLevel: number;
     floor: number;
     dialogue: { name: string, text: string } | null;
-    isCrafting: boolean; // クラフト中かどうかのフラグ
+    isCrafting: boolean;
   } | null>(null);
 
   const [showStatus, setShowStatus] = useState(false);
@@ -53,13 +52,25 @@ export const GameScreen: React.FC = () => {
     if (!gameStateRef.current) {
       const initialTown = generateTownMap(1); 
       const initialPlayer = createPlayer(selectedJob); 
-      initialPlayer.x = initialTown.spawnPoint.x;
-      initialPlayer.y = initialTown.spawnPoint.y;
+      
+      let spawnX = initialTown.spawnPoint.x;
+      let spawnY = initialTown.spawnPoint.y;
+      
+      // 座標の安全チェック
+      if (spawnX < 0 || spawnX > GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE) spawnX = 10 * GAME_CONFIG.TILE_SIZE;
+      if (spawnY < 0 || spawnY > GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE) spawnY = 10 * GAME_CONFIG.TILE_SIZE;
+
+      initialPlayer.x = spawnX;
+      initialPlayer.y = spawnY;
+
+      // 初期カメラ位置
+      const camX = Math.max(0, Math.min(initialPlayer.x - GAME_CONFIG.VIEWPORT_WIDTH / 2, GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE - GAME_CONFIG.VIEWPORT_WIDTH));
+      const camY = Math.max(0, Math.min(initialPlayer.y - GAME_CONFIG.VIEWPORT_HEIGHT / 2, GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE - GAME_CONFIG.VIEWPORT_HEIGHT));
 
       gameStateRef.current = {
         isPaused: false,
         gameTime: 0,
-        camera: { x: 0, y: 0 },
+        camera: { x: camX, y: camY },
         player: initialPlayer,
         party: [],
         companions: [],
@@ -72,7 +83,7 @@ export const GameScreen: React.FC = () => {
         particles: [],
         location: { type: 'town', level: 0, worldX: 0, worldY: 0, townId: 'starting_village' },
         mode: 'combat',
-        settings: { difficulty: 'normal', gameSpeed: 1.0, volume: 0.5 },
+        settings: { difficulty: 'normal', gameSpeed: 1.0, volume: 0.5, masterVolume: 0.5 },
         dialogue: null,
         activeShop: null,
         activeCrafting: null,
@@ -82,7 +93,6 @@ export const GameScreen: React.FC = () => {
     const loop = (time: number) => {
       if (gameStateRef.current) {
         const state = gameStateRef.current;
-        // クラフト中やポーズ中はゲームループを止める、あるいは入力を無視する
         const isPaused = state.isPaused || !!state.activeCrafting;
 
         const inputState = { keys: keys.current, mouse: mouse.current };
@@ -90,7 +100,6 @@ export const GameScreen: React.FC = () => {
         renderGame(ctx, state, { mouse: mouse.current });
 
         setUiState(prev => {
-          // 簡易比較で更新頻度を下げる
           const newState = {
             playerHp: state.player.hp,
             playerMaxHp: state.player.maxHp,
@@ -101,7 +110,7 @@ export const GameScreen: React.FC = () => {
             playerLevel: state.player.level,
             floor: state.location.level,
             dialogue: state.dialogue || null,
-            isCrafting: !!state.activeCrafting // クラフト状態
+            isCrafting: !!state.activeCrafting
           };
           
           if (!prev || JSON.stringify(prev) !== JSON.stringify(newState)) {
@@ -117,31 +126,24 @@ export const GameScreen: React.FC = () => {
     return () => { if (requestRef.current) cancelAnimationFrame(requestRef.current); };
   }, [selectedJob]);
 
-  // Handle Crafting Logic (React side)
   const handleCraft = (recipe: CraftingRecipe) => {
     if (!gameStateRef.current) return;
     const player = gameStateRef.current.player;
     
-    // 素材消費
     recipe.materials.forEach(mat => {
       let remaining = mat.count;
       player.inventory = player.inventory.filter(item => {
         if (remaining > 0 && item.materialType === mat.materialType) {
           remaining--;
-          return false; // Remove
+          return false; 
         }
         return true;
       });
     });
     
-    // お金消費
     player.gold -= recipe.cost;
-
-    // アイテム生成
     const newItem = { ...recipe.result, instanceId: crypto.randomUUID() };
     player.inventory.push(newItem);
-    
-    alert(`Crafted ${newItem.name}!`); // 簡易フィードバック
   };
 
   const closeCrafting = () => {
@@ -151,7 +153,6 @@ export const GameScreen: React.FC = () => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (selectedJob && (e.key === 'Escape' || e.key === 'm' || e.key === 'M')) {
-        // クラフト中なら閉じる、そうでなければステータス
         if (gameStateRef.current?.activeCrafting) {
           gameStateRef.current.activeCrafting = null;
         } else {
@@ -178,7 +179,6 @@ export const GameScreen: React.FC = () => {
           />
           {showStatus && <StatusMenu player={gameStateRef.current.player} companions={gameStateRef.current.party || []} onClose={() => setShowStatus(false)} />}
           
-          {/* Crafting Menu Overlay */}
           {uiState.isCrafting && gameStateRef.current.activeCrafting && (
             <CraftingMenu 
               player={gameStateRef.current.player}
