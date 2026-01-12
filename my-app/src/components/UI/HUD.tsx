@@ -1,97 +1,84 @@
 import React from 'react';
-import { Skull, Backpack, Sword, Shovel } from 'lucide-react';
-import { THEME } from '../../assets/theme';
+import { PlayerEntity } from '../../features/game/types';
 
 interface HUDProps {
-  hp: number;
-  maxHp: number;
-  inventoryCount: number;
-  enemyCount: number;
-  mode: 'combat' | 'build';
-  onToggleMode: () => void;
-  onSave: () => void;
+  player: PlayerEntity;
+  floor: number;
+  onOpenStatus?: () => void;
 }
 
-/**
- * ゲーム画面上のUI（ヘッドアップディスプレイ）コンポーネント
- */
-export const HUD: React.FC<HUDProps> = ({
-  hp,
-  maxHp,
-  inventoryCount,
-  enemyCount,
-  mode,
-  onToggleMode,
-  onSave
-}) => {
+export const HUD: React.FC<HUDProps> = ({ player, floor, onOpenStatus }) => {
+  const hpPercent = (player.hp / player.maxHp) * 100;
+  const mpPercent = (player.mp / player.maxMp) * 100;
+  const expPercent = (player.exp / player.maxExp) * 100;
+
   return (
-    <>
-      {/* 上部ステータスバー */}
-      <div className="absolute top-0 left-0 w-full p-4 flex justify-between items-start pointer-events-none z-10 select-none">
-        <div className="flex gap-4">
-          {/* HP Globe (Diablo style) */}
-          <div 
-            className="relative w-24 h-24 rounded-full border-4 bg-black overflow-hidden shadow-xl"
-            style={{ borderColor: THEME.colors.dirt }}
-          >
+    <div className="absolute inset-0 pointer-events-none">
+      
+      {/* Top Left: Status Bars */}
+      <div className="absolute top-4 left-4 w-64 space-y-2 pointer-events-auto">
+        
+        {/* HP Bar */}
+        <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-700 shadow-lg">
+          <div className="flex justify-between text-xs text-white mb-1 font-mono">
+            <span className="font-bold text-green-400">HP</span>
+            <span>{Math.floor(player.hp)}/{player.maxHp}</span>
+          </div>
+          <div className="h-3 bg-slate-700 rounded-full overflow-hidden border border-slate-600">
             <div 
-              className="absolute bottom-0 w-full bg-red-900 transition-all duration-300 ease-out"
-              style={{ height: `${(hp / maxHp) * 100}%` }}
+              className="h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-300"
+              style={{ width: `${hpPercent}%` }}
             />
-            <div className="absolute inset-0 flex items-center justify-center text-xl font-bold text-red-200 drop-shadow-md">
-              {Math.ceil(hp)}
-            </div>
-          </div>
-          
-          {/* 情報パネル */}
-          <div className="mt-2 space-y-2 text-gray-200">
-            <div className="flex items-center gap-2 bg-black/60 px-3 py-1 rounded border border-gray-700">
-              <Skull className="w-4 h-4 text-red-500" />
-              <span>Threat: {enemyCount}</span>
-            </div>
-            <div className="flex items-center gap-2 bg-black/60 px-3 py-1 rounded border border-gray-700">
-              <Backpack className="w-4 h-4 text-yellow-600" />
-              <span>Gold: {inventoryCount}</span>
-            </div>
           </div>
         </div>
 
-        {/* モード切替スイッチ */}
-        <div className="flex flex-col items-end gap-2 pointer-events-auto">
-          <div className="text-sm text-gray-400 mb-1">Current Mode</div>
-          <button 
-            onClick={onToggleMode}
-            className={`flex items-center gap-2 px-4 py-2 rounded border-2 transition-all font-bold shadow-lg ${
-              mode === 'combat' 
-                ? 'bg-red-900/80 border-red-500 text-red-100' 
-                : 'bg-green-900/80 border-green-500 text-green-100'
-            }`}
-          >
-            {mode === 'combat' ? <Sword className="w-5 h-5" /> : <Shovel className="w-5 h-5" />}
-            <span className="uppercase tracking-wider">{mode}</span>
-          </button>
+        {/* MP Bar */}
+        <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-700 shadow-lg">
+          <div className="flex justify-between text-xs text-white mb-1 font-mono">
+            <span className="font-bold text-blue-400">MP</span>
+            <span>{Math.floor(player.mp)}/{player.maxMp}</span>
+          </div>
+          <div className="h-3 bg-slate-700 rounded-full overflow-hidden border border-slate-600">
+            <div 
+              className="h-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-300"
+              style={{ width: `${mpPercent}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Level Info */}
+        <div className="flex items-center gap-2 px-1">
+          <div className="bg-slate-900/80 px-2 py-1 rounded border border-slate-700 text-yellow-400 font-bold text-sm shadow">
+            Lv.{player.level}
+          </div>
+          <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+            <div 
+              className="h-full bg-yellow-500 transition-all duration-300"
+              style={{ width: `${expPercent}%` }}
+            />
+          </div>
         </div>
       </div>
 
-      {/* 下部アクションバー */}
-      <div className="absolute bottom-0 left-0 w-full flex justify-center pointer-events-none z-10">
-        <div className="w-[600px] h-16 bg-[#2d1b15] border-t-4 border-[#5d4037] flex items-center justify-between px-8 rounded-t-lg shadow-2xl pointer-events-auto">
-          <div className="flex gap-4">
-             {/* ホットキースロット（ダミー） */}
-             {[1, 2, 3].map(n => (
-               <div key={n} className="w-10 h-10 bg-black border border-[#5d4037] flex items-center justify-center text-gray-600 hover:border-yellow-600 cursor-pointer">
-                 {n}
-               </div>
-             ))}
-          </div>
-          <button 
-            onClick={onSave}
-            className="px-6 py-2 bg-blue-900/40 border border-blue-500 text-blue-200 rounded hover:bg-blue-800/60 transition-colors"
-          >
-            Save Progress
-          </button>
+      {/* Bottom Left: Floor Info */}
+      <div className="absolute bottom-4 left-4 pointer-events-auto">
+        <div className="bg-black/40 backdrop-blur-sm px-4 py-2 rounded-lg border border-white/10 text-white/80 font-mono text-sm">
+          Floor: <span className="text-white font-bold">B{floor}</span>
         </div>
       </div>
-    </>
+
+      {/* Bottom Right: Menu Buttons */}
+      <div className="absolute bottom-4 right-4 flex gap-2 pointer-events-auto">
+        <button 
+          onClick={onOpenStatus}
+          className="bg-slate-800/90 hover:bg-slate-700 text-white px-4 py-2 rounded-lg border border-slate-600 transition-all hover:scale-105 active:scale-95 flex items-center gap-2 shadow-lg"
+          title="Open Status Menu"
+        >
+          <span className="text-lg">📜</span>
+          <span className="hidden sm:inline text-sm font-bold tracking-wide">STATUS</span>
+        </button>
+      </div>
+
+    </div>
   );
 };
