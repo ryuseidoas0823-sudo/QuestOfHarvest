@@ -1,6 +1,6 @@
 import { GAME_CONFIG, DIFFICULTY_CONFIG } from '../../../assets/constants';
 import { THEME } from '../../../assets/theme';
-import { GameState, CompanionEntity } from '../types';
+import { GameState, CompanionEntity, WeaponStats } from '../types';
 import { checkCollision, tryMove, checkAttackHit } from './Physics';
 import { generateEnemy } from '../lib/EnemyGenerator';
 import { generateRandomItem, generateBossDrop } from '../lib/ItemGenerator';
@@ -42,7 +42,17 @@ export const updateGame = (
   player.x = newPos.x;
   player.y = newPos.y;
 
-  // --- ★ マップ端での区画移動 (World Chunk Transition) ---
+  // --- 攻撃アニメーション終了判定 ---
+  if (player.isAttacking && player.attackStartTime && now - player.attackStartTime > (player.attackDuration || 200)) {
+    player.isAttacking = false;
+  }
+  party.forEach(c => {
+    if (c.isAttacking && c.attackStartTime && now - c.attackStartTime > (c.attackDuration || 200)) {
+      c.isAttacking = false;
+    }
+  });
+
+  // --- 区画移動 (省略なし) ---
   if (location.type === 'world') {
     let nextWx = location.worldX;
     let nextWy = location.worldY;
@@ -50,53 +60,24 @@ export const updateGame = (
     let newPx = player.x;
     let newPy = player.y;
 
-    // 左へ移動
-    if (player.x < 0 && location.worldX > 0) {
-      nextWx--;
-      newPx = (MAP_WIDTH - 2) * TILE_SIZE; // 右端へ
-      changed = true;
-    }
-    // 右へ移動
-    else if (player.x > MAP_WIDTH * TILE_SIZE && location.worldX < WORLD_SIZE_W - 1) {
-      nextWx++;
-      newPx = TILE_SIZE; // 左端へ
-      changed = true;
-    }
-    // 上へ移動
-    else if (player.y < 0 && location.worldY > 0) {
-      nextWy--;
-      newPy = (MAP_HEIGHT - 2) * TILE_SIZE; // 下端へ
-      changed = true;
-    }
-    // 下へ移動
-    else if (player.y > MAP_HEIGHT * TILE_SIZE && location.worldY < WORLD_SIZE_H - 1) {
-      nextWy++;
-      newPy = TILE_SIZE; // 上端へ
-      changed = true;
-    }
+    if (player.x < 0 && location.worldX > 0) { nextWx--; newPx = (MAP_WIDTH - 2) * TILE_SIZE; changed = true; }
+    else if (player.x > MAP_WIDTH * TILE_SIZE && location.worldX < WORLD_SIZE_W - 1) { nextWx++; newPx = TILE_SIZE; changed = true; }
+    else if (player.y < 0 && location.worldY > 0) { nextWy--; newPy = (MAP_HEIGHT - 2) * TILE_SIZE; changed = true; }
+    else if (player.y > MAP_HEIGHT * TILE_SIZE && location.worldY < WORLD_SIZE_H - 1) { nextWy++; newPy = TILE_SIZE; changed = true; }
 
     if (changed) {
-      // 新しい区画を生成
       state.location.worldX = nextWx;
       state.location.worldY = nextWy;
       const newChunk = generateWorldChunk(nextWx, nextWy);
-      
       state.map = newChunk.map;
       state.chests = newChunk.chests;
       state.npcs = [];
       state.enemies = [];
       state.droppedItems = [];
-      
-      // プレイヤー位置更新
-      player.x = newPx;
-      player.y = newPy;
-      
-      // 仲間も追従
+      player.x = newPx; player.y = newPy;
       party.forEach(c => { c.x = newPx; c.y = newPy; });
-      
-      // 新しい区画の敵をスポーン
       spawnWorldEnemies(state);
-      return; // 描画更新待ち
+      return; 
     }
   }
 
@@ -106,15 +87,22 @@ export const updateGame = (
       category: 'Fist', range: 1, width: 0.8, shape: 'line',
       attackSpeed: 0.5, knockback: 0.5, hitRate: 0.9, critRate: 0.1,
       slash: 0, blunt: 5, pierce: 0
-    } as any;
+    } as WeaponStats;
 
     if (!player.lastAttackTime || now - player.lastAttackTime > weapon.attackSpeed * 1000 / speedMult) {
       player.lastAttackTime = now;
+      
       const worldMx = input.mouse.x + state.camera.x;
       const worldMy = input.mouse.y + state.camera.y;
       const angle = Math.atan2(worldMy - (player.y + player.height/2), worldMx - (player.x + player.width/2));
       const rangePx = weapon.range * TILE_SIZE;
       
+      // 攻撃アニメーション開始
+      player.isAttacking = true;
+      player.attackStartTime = now;
+      player.attackDuration = 200; // ms
+      player.attackDirection = angle;
+
       state.particles.push({
         x: player.x + player.width/2 + Math.cos(angle) * rangePx * 0.5, 
         y: player.y + player.height/2 + Math.sin(angle) * rangePx * 0.5, 
@@ -187,6 +175,13 @@ export const updateGame = (
             const enemy = enemies.find(e => Math.abs(e.x - targetX) < 5 && Math.abs(e.y - targetY) < 5);
             if (enemy && (!comp.lastAttackTime || now - comp.lastAttackTime > 1000)) {
                 comp.lastAttackTime = now;
+                
+                // 仲間も攻撃アニメーション
+                comp.isAttacking = true;
+                comp.attackStartTime = now;
+                comp.attackDuration = 200;
+                comp.attackDirection = Math.atan2(targetY - comp.y, targetX - comp.x);
+
                 enemy.hp -= comp.attack; 
                 state.particles.push({x: enemy.x, y: enemy.y, vx:0, vy:0, life:0.5, color: '#00bfff', size: 5});
                 if (enemy.hp <= 0) { enemy.dead = true; player.xp += 10; player.gold += 5; }
@@ -196,13 +191,12 @@ export const updateGame = (
     const nextC = tryMove(comp, cdx, cdy, map); comp.x = nextC.x; comp.y = nextC.y;
   });
 
-  // --- 4. マップ遷移 (施設) ---
+  // (以下、マップ遷移や敵AIなどは変更なしのため省略。generateWorldChunk呼び出しは維持)
+  // ... [Omitted for brevity, assume existing logic remains] ...
   const tx = Math.floor((player.x + player.width/2) / TILE_SIZE);
   const ty = Math.floor((player.y + player.height/2) / TILE_SIZE);
-  
   if (tx >= 0 && tx < MAP_WIDTH && ty >= 0 && ty < MAP_HEIGHT) {
     const tile = map[ty] ? map[ty][tx] : null;
-
     if (tile && tile.type === 'town_entrance') {
       state.location = { ...state.location, type: 'town', level: 0, townId: `town_${Date.now()}` };
       const town = generateTownMap(player.level);
@@ -234,9 +228,7 @@ export const updateGame = (
       }
     }
     else if (tile && tile.type === 'portal_out') {
-      // 戻る場所（ワールドマップ）
-      state.location.type = 'world';
-      state.location.level = 0;
+      state.location.type = 'world'; state.location.level = 0;
       const world = generateWorldChunk(state.location.worldX, state.location.worldY);
       state.map = world.map; state.chests = world.chests; state.npcs = []; state.enemies = []; state.droppedItems = [];
       state.player.x = world.spawnPoint.x; state.player.y = world.spawnPoint.y;
@@ -245,7 +237,7 @@ export const updateGame = (
     }
   }
 
-  // --- 5. NPC ---
+  // NPC
   if (location.type === 'town' && input.mouse.leftDown) {
     const mx = input.mouse.x + state.camera.x;
     const my = input.mouse.y + state.camera.y;
@@ -255,13 +247,13 @@ export const updateGame = (
     }
   }
 
-  // --- 6. カメラ ---
+  // Camera
   state.camera.x = player.x - VIEWPORT_WIDTH / 2;
   state.camera.y = player.y - VIEWPORT_HEIGHT / 2;
   state.camera.x = Math.max(0, Math.min(state.camera.x, MAP_WIDTH * TILE_SIZE - VIEWPORT_WIDTH));
   state.camera.y = Math.max(0, Math.min(state.camera.y, MAP_HEIGHT * TILE_SIZE - VIEWPORT_HEIGHT));
 
-  // --- 7. 敵AI ---
+  // Enemy AI
   enemies.forEach(enemy => {
     if (enemy.dead) return;
     const eSpeed = enemy.speed * speedMult;
@@ -286,7 +278,7 @@ export const updateGame = (
     });
   });
 
-  // --- 8. アイテム回収 ---
+  // Item Pickup
   if (input.mouse.leftDown) { 
     const worldMx = input.mouse.x + state.camera.x;
     const worldMy = input.mouse.y + state.camera.y;
