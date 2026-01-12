@@ -33,9 +33,11 @@ export default function App() {
     const initAuth = async () => {
       try {
         setError(null);
+        // Canvas環境用のカスタムトークンがあれば優先使用
         if (typeof (window as any).__initial_auth_token !== 'undefined' && (window as any).__initial_auth_token) {
           await signInWithCustomToken(auth, (window as any).__initial_auth_token);
         } else {
+          // 通常は匿名認証
           await signInAnonymously(auth);
         }
       } catch (err: any) {
@@ -56,14 +58,15 @@ export default function App() {
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
             setHasSave(true);
-            // 設定だけ先に読み込んで反映しておく
+            // 設定だけ先に読み込んで反映しておく（ユーザー体験向上のため）
             const data = docSnap.data();
-            if (data.settings) {
+            if (data?.settings) {
               setGlobalSettings(data.settings);
             }
           }
         } catch (e) {
           console.warn("Failed to check save data:", e);
+          // 権限エラーなどの場合でも、とりあえずタイトル画面には行かせる
         }
         setLoading(false);
         setScreen('title'); // タイトル画面へ
@@ -91,18 +94,28 @@ export default function App() {
       console.log("Loading Game Data...");
       const docRef = doc(db, 'artifacts', APP_ID, 'users', user.uid, 'saveData');
       const docSnap = await getDoc(docRef);
+      
       if (docSnap.exists()) {
         const data = docSnap.data();
+        
+        // 【追加】簡易データバリデーション
+        // プレイヤーデータが含まれていない空データなどを弾く
+        if (!data || !data.player) {
+          throw new Error("Save data is corrupted or empty.");
+        }
+
         setSaveData(data);
         if (data.settings) setGlobalSettings(data.settings);
+        
         console.log("Data loaded successfully.");
         setScreen('game');
       } else {
         alert("Save data not found!");
+        setHasSave(false); // UIの状態も同期
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Load failed:", e);
-      alert("Failed to load save data. Check console for details.");
+      alert(`Failed to load save data: ${e.message}`);
     } finally {
       setLoading(false);
     }
