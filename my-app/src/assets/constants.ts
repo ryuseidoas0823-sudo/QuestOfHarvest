@@ -1,26 +1,24 @@
 export const GAME_CONFIG = {
   // 画面サイズ設定 (ズーム調整)
-  // タイルサイズを大きくし、表示するタイル数を減らすことで「寄った」画角にする
-  TILE_SIZE: 48, // 32 -> 48 に拡大
+  // TILE_SIZEを小さくして、より広範囲が見えるようにします
+  TILE_SIZE: 32, // 48 -> 32 に縮小（カメラを引く）
   SCREEN_WIDTH: 800,
   SCREEN_HEIGHT: 600,
   
-  // ビューポート（カメラが映す範囲）
-  // 画面サイズと同じにすることで等倍表示、小さくすると拡大されるが、
-  // ここではCanvasサイズ(SCREEN_W/H)に合わせて調整
+  // ビューポート
   VIEWPORT_WIDTH: 800,
   VIEWPORT_HEIGHT: 600,
 
   // マップ設定
-  MAP_WIDTH: 50,
-  MAP_HEIGHT: 50,
-  WORLD_SIZE_W: 5, // 5x5 chunk
+  MAP_WIDTH: 60, // マップ自体も少し広く
+  MAP_HEIGHT: 60,
+  WORLD_SIZE_W: 5,
   WORLD_SIZE_H: 5,
 
   // ゲームプレイ設定
-  PLAYER_SPEED: 2, // 4 -> 2 に変更（スピード半減）
+  PLAYER_SPEED: 4, // TILE_SIZE縮小に合わせて速度感調整（ピクセルベースならそのままでも良いが、バランス見て）
   ENEMY_SPAWN_RATE: 0.02,
-  DAY_NIGHT_CYCLE: 60000 * 5, // 5分
+  DAY_NIGHT_CYCLE: 60000 * 5,
 };
 
 export const DIFFICULTY_CONFIG = {
