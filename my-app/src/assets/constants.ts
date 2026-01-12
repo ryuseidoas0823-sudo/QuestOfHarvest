@@ -1,18 +1,18 @@
 export const GAME_CONFIG = {
-  // マップ設定
+  // マップ設定 (30x30に縮小して軽量化)
   TILE_SIZE: 40,
-  MAP_WIDTH: 50,
-  MAP_HEIGHT: 50,
+  MAP_WIDTH: 30,
+  MAP_HEIGHT: 30,
   
   // ビューポート
   VIEWPORT_WIDTH: 800,
   VIEWPORT_HEIGHT: 600,
   
-  // ゲームプレイ設定（速度を少し遅く調整）
-  PLAYER_SPEED: 2.5,       // 元3 -> 2.5
-  ENEMY_BASE_SPEED: 0.8,   // 元1 -> 0.8
+  // ゲームプレイ設定
+  PLAYER_SPEED: 2.5,
+  ENEMY_BASE_SPEED: 0.8,
   ENEMY_SPAWN_RATE: 0.005,
-  MAX_ENEMIES: 50,
+  MAX_ENEMIES: 30, // マップが狭くなったので敵の上限も少し減らす
   
   // インベントリ制限
   MAX_INVENTORY_SLOTS: 20,
@@ -44,7 +44,7 @@ export const DIFFICULTY_CONFIG = {
     name: 'Expert',
     hpMult: 1.8,
     defenseMult: 1.5,
-    dropRateMult: 2.0, // レア以上ドロップ率2倍のベースとして使用
+    dropRateMult: 2.0,
     rareDropMult: 2.0,
   }
 } as const;
