@@ -115,7 +115,13 @@ export interface CombatEntity extends Entity {
   defense: number;
   attack: number;
   job?: Job;
+  
+  // 戦闘・アニメーション状態
   lastAttackTime?: number;
+  isAttacking?: boolean;      // 攻撃モーション中フラグ
+  attackStartTime?: number;   // 攻撃開始時刻
+  attackDuration?: number;    // モーション時間 (ms)
+  attackDirection?: number;   // 攻撃方向 (ラジアン)
 }
 
 export interface PlayerEntity extends CombatEntity {
@@ -176,17 +182,14 @@ export interface GameSettings {
 // マップロケーション情報
 export interface LocationInfo {
   type: 'world' | 'dungeon' | 'town';
-  
-  // ワールドマップ座標 (0~29)
   worldX: number;
   worldY: number;
-  
-  // ダンジョン深度（ワールドなら0）
   level: number;       
   maxDepth?: number;   
   dungeonId?: string;  
   difficultyMult?: number; 
   townId?: string;
+  mapsSinceLastTown?: number;
 }
 
 export interface GameState {
