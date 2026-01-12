@@ -2,7 +2,7 @@ import { GAME_CONFIG } from '../../../assets/constants';
 import { THEME } from '../../../assets/theme';
 import { PlayerEntity, Job, WeaponStats, InventoryItem, Skill, PlayerSkillState } from '../types';
 
-// スキルデータ (簡易定義)
+// スキルデータ
 export const SKILL_DATABASE: Record<string, Skill> = {
   // Swordsman
   'bash': { id: 'bash', name: 'Shield Bash', description: 'Stun enemy with shield.', type: 'active', target: 'direction', mpCost: 10, cooldown: 5, icon: '🛡️', unlockLevel: 1, damageMultiplier: 1.2, range: 1.5, jobRequirement: ['Swordsman', 'Warrior'] },
@@ -125,6 +125,7 @@ export const createPlayer = (job: Job): PlayerEntity => {
     weaponStats: initialWeaponStats
   };
 
+  // スキル初期化
   const skills: PlayerSkillState[] = initialSkills.map(id => ({ skillId: id, lastUsed: 0, level: 1 }));
   const hotbar = [initialSkills[0] || null, initialSkills[1] || null, null, null, null];
 
