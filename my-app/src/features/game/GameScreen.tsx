@@ -83,7 +83,7 @@ export const GameScreen: React.FC = () => {
         particles: [],
         location: { type: 'town', level: 0, worldX: 0, worldY: 0, townId: 'starting_village' },
         mode: 'combat',
-        settings: { difficulty: 'normal', gameSpeed: 1.0, volume: 0.5, masterVolume: 0.5 },
+        settings: { difficulty: 'normal', gameSpeed: 1.0, masterVolume: 0.5 },
         dialogue: null,
         activeShop: null,
         activeCrafting: null,
