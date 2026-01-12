@@ -55,7 +55,7 @@ export const updateGame = (
       attackSpeed: 0.5, knockback: 0.5,
       hitRate: 0.9, critRate: 0.1,
       slash: 0, blunt: 5, pierce: 0
-    } as any; // any cast to avoid strict type checks for default
+    } as any; 
 
     if (!player.lastAttackTime || now - player.lastAttackTime > weapon.attackSpeed * 1000 / speedMult) {
       player.lastAttackTime = now;
@@ -190,16 +190,16 @@ export const updateGame = (
   const ty = Math.floor((player.y + player.height/2) / TILE_SIZE);
   
   if (tx >= 0 && tx < MAP_WIDTH && ty >= 0 && ty < MAP_HEIGHT) {
-    const tile = map[ty][tx];
+    const tile = map[ty] ? map[ty][tx] : null;
 
-    if (tile.type === 'town_entrance') {
+    if (tile && tile.type === 'town_entrance') {
       state.location = { type: 'town', level: 0, townId: `town_${Date.now()}` };
       const town = generateTownMap(player.level);
       state.map = town.map; state.npcs = town.npcs; state.chests = []; state.droppedItems = []; state.enemies = [];
       state.player.x = town.spawnPoint.x; state.player.y = town.spawnPoint.y;
       party.forEach(c => { c.x = town.spawnPoint.x; c.y = town.spawnPoint.y; });
     }
-    else if (tile.type === 'dungeon_entrance' && tile.meta) {
+    else if (tile && tile.type === 'dungeon_entrance' && tile.meta) {
       state.location = { type: 'dungeon', level: 1, maxDepth: tile.meta.maxDepth, dungeonId: `dungeon_${Date.now()}` };
       const dungeon = generateDungeonMap(1, tile.meta.maxDepth);
       state.map = dungeon.map; state.chests = dungeon.chests; state.npcs = []; state.droppedItems = []; state.enemies = [];
@@ -207,7 +207,7 @@ export const updateGame = (
       party.forEach(c => { c.x = dungeon.spawnPoint.x; c.y = dungeon.spawnPoint.y; });
       spawnDungeonEnemies(state, 1);
     }
-    else if (tile.type === 'stairs_down') {
+    else if (tile && tile.type === 'stairs_down') {
       const nextLevel = state.location.level + 1;
       state.location.level = nextLevel;
       const dungeon = generateDungeonMap(nextLevel, state.location.maxDepth || 1);
@@ -222,7 +222,7 @@ export const updateGame = (
         spawnDungeonEnemies(state, nextLevel);
       }
     }
-    else if (tile.type === 'portal_out') {
+    else if (tile && tile.type === 'portal_out') {
       if (location.type === 'town') { state.location = { type: 'world', level: 0, mapsSinceLastTown: 0 }; }
       else { const prev = state.location.mapsSinceLastTown || 0; state.location = { type: 'world', level: 0, mapsSinceLastTown: prev + 1 }; }
       const world = generateWorldMap(state.location.mapsSinceLastTown);
@@ -253,9 +253,12 @@ export const updateGame = (
   enemies.forEach(enemy => {
     if (enemy.dead) return;
     const eSpeed = enemy.speed * speedMult;
-    // 簡易速度適用
-    enemy.x += (Math.random() - 0.5) * eSpeed; 
-    enemy.y += (Math.random() - 0.5) * eSpeed;
+    
+    // 簡易速度適用 (ランダム移動)
+    if (Math.random() < 0.02) {
+        enemy.x += (Math.random() - 0.5) * 10;
+        enemy.y += (Math.random() - 0.5) * 10;
+    }
 
     // プレイヤーに向かう
     const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
@@ -266,7 +269,7 @@ export const updateGame = (
       enemy.y += Math.sin(angle) * eSpeed;
     }
 
-    const enemyNextPos = tryMove(enemy, 0, 0, map); // 壁判定のみ利用
+    const enemyNextPos = tryMove(enemy, 0, 0, map); // 壁判定
     enemy.x = enemyNextPos.x; enemy.y = enemyNextPos.y;
 
     if (checkCollision(player, enemy)) {
@@ -322,23 +325,41 @@ export const updateGame = (
 };
 
 const spawnWorldEnemies = (state: GameState) => {
-  // 重要: ここでも変数を分割代入して定義する
   const { MAP_WIDTH, MAP_HEIGHT, TILE_SIZE } = GAME_CONFIG;
-  const ex = Math.random() * (MAP_WIDTH * TILE_SIZE);
-  const ey = Math.random() * (MAP_HEIGHT * TILE_SIZE);
-  state.enemies.push(generateEnemy(ex, ey, state.player.level));
+  // 試行回数制限を追加
+  let ex, ey, attempts = 0;
+  do {
+    ex = Math.random() * (MAP_WIDTH * TILE_SIZE);
+    ey = Math.random() * (MAP_HEIGHT * TILE_SIZE);
+    attempts++;
+  } while (
+    (state.map[Math.floor(ey/TILE_SIZE)]?.[Math.floor(ex/TILE_SIZE)]?.solid ?? true) &&
+    attempts < 50
+  );
+
+  if (attempts < 50) {
+    state.enemies.push(generateEnemy(ex, ey, state.player.level));
+  }
 };
 
 const spawnDungeonEnemies = (state: GameState, level: number) => {
-  // 重要: ここでも変数を分割代入して定義する
   const { MAP_WIDTH, MAP_HEIGHT, TILE_SIZE } = GAME_CONFIG;
   const count = 5 + level;
   for(let i=0; i<count; i++) {
      let ex, ey;
+     let attempts = 0;
+     // 無限ループ対策: 100回試行してダメなら諦める
      do {
        ex = Math.random() * (MAP_WIDTH * TILE_SIZE);
        ey = Math.random() * (MAP_HEIGHT * TILE_SIZE);
-     } while(state.map[Math.floor(ey/TILE_SIZE)][Math.floor(ex/TILE_SIZE)].solid);
-     state.enemies.push(generateEnemy(ex, ey, state.player.level + level));
+       attempts++;
+     } while(
+       (state.map[Math.floor(ey/TILE_SIZE)]?.[Math.floor(ex/TILE_SIZE)]?.solid ?? true) && 
+       attempts < 100
+     );
+     
+     if (attempts < 100) {
+        state.enemies.push(generateEnemy(ex, ey, state.player.level + level));
+     }
   }
 };
