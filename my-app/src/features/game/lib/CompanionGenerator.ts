@@ -1,5 +1,6 @@
 import { CompanionEntity, Job } from '../types';
-import { THEME } from '../../assets/theme';
+// 修正: 階層を一つ深くしました (../../ -> ../../../)
+import { THEME } from '../../../assets/theme';
 
 const JOBS: Job[] = ['Warrior', 'Mage', 'Archer', 'Cleric'];
 
