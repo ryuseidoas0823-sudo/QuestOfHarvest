@@ -56,14 +56,12 @@ export const GameScreen: React.FC = () => {
       let spawnX = initialTown.spawnPoint.x;
       let spawnY = initialTown.spawnPoint.y;
       
-      // 座標の安全チェック
       if (spawnX < 0 || spawnX > GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE) spawnX = 10 * GAME_CONFIG.TILE_SIZE;
       if (spawnY < 0 || spawnY > GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE) spawnY = 10 * GAME_CONFIG.TILE_SIZE;
 
       initialPlayer.x = spawnX;
       initialPlayer.y = spawnY;
 
-      // 初期カメラ位置
       const camX = Math.max(0, Math.min(initialPlayer.x - GAME_CONFIG.VIEWPORT_WIDTH / 2, GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE - GAME_CONFIG.VIEWPORT_WIDTH));
       const camY = Math.max(0, Math.min(initialPlayer.y - GAME_CONFIG.VIEWPORT_HEIGHT / 2, GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE - GAME_CONFIG.VIEWPORT_HEIGHT));
 
@@ -83,7 +81,7 @@ export const GameScreen: React.FC = () => {
         particles: [],
         location: { type: 'town', level: 0, worldX: 0, worldY: 0, townId: 'starting_village' },
         mode: 'combat',
-        settings: { difficulty: 'normal', gameSpeed: 1.0, masterVolume: 0.5 },
+        settings: { difficulty: 'normal', gameSpeed: 1.0, volume: 0.5, masterVolume: 0.5 },
         dialogue: null,
         activeShop: null,
         activeCrafting: null,
