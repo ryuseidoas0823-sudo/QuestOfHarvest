@@ -30,6 +30,8 @@ export const GameScreen: React.FC = () => {
     floor: number;
     dialogue: { name: string, text: string } | null;
     isCrafting: boolean;
+    // ホットバー更新用State（Refの変更を検知して再レンダリングさせるため）
+    hotbar: (string | null)[];
   } | null>(null);
 
   const [showStatus, setShowStatus] = useState(false);
@@ -108,7 +110,8 @@ export const GameScreen: React.FC = () => {
             playerLevel: state.player.level,
             floor: state.location.level,
             dialogue: state.dialogue || null,
-            isCrafting: !!state.activeCrafting
+            isCrafting: !!state.activeCrafting,
+            hotbar: state.player.hotbar // ホットバー状態も監視
           };
           
           if (!prev || JSON.stringify(prev) !== JSON.stringify(newState)) {
@@ -144,6 +147,15 @@ export const GameScreen: React.FC = () => {
     player.inventory.push(newItem);
   };
 
+  // ホットバー設定処理
+  const handleSetHotbar = (slotIndex: number, skillId: string | null) => {
+    if (gameStateRef.current) {
+      const newHotbar = [...gameStateRef.current.player.hotbar];
+      newHotbar[slotIndex] = skillId;
+      gameStateRef.current.player.hotbar = newHotbar;
+    }
+  };
+
   const closeCrafting = () => {
     if (gameStateRef.current) gameStateRef.current.activeCrafting = null;
   };
@@ -170,12 +182,30 @@ export const GameScreen: React.FC = () => {
 
       {selectedJob && gameStateRef.current && uiState && (
         <>
+          {/* HUDにもRefのホットバー状態を反映させるため、uiState経由で渡すか、Refを直接参照するが、再レンダリングが必要なのでuiState.hotbarを使う */}
           <HUD 
-            player={{ ...gameStateRef.current.player, hp: uiState.playerHp, maxHp: uiState.playerMaxHp, mp: uiState.playerMp, maxMp: uiState.playerMaxMp, exp: uiState.playerExp, nextLevelXp: uiState.playerMaxExp, level: uiState.playerLevel }} 
+            player={{ 
+              ...gameStateRef.current.player, 
+              hp: uiState.playerHp, 
+              maxHp: uiState.playerMaxHp, 
+              mp: uiState.playerMp, 
+              maxMp: uiState.playerMaxMp, 
+              exp: uiState.playerExp, 
+              nextLevelXp: uiState.playerMaxExp, 
+              level: uiState.playerLevel,
+              hotbar: uiState.hotbar // 反映
+            }} 
             floor={uiState.floor}
             onOpenStatus={() => setShowStatus(true)}
           />
-          {showStatus && <StatusMenu player={gameStateRef.current.player} companions={gameStateRef.current.party || []} onClose={() => setShowStatus(false)} />}
+          {showStatus && (
+            <StatusMenu 
+              player={gameStateRef.current.player} 
+              companions={gameStateRef.current.party || []} 
+              onClose={() => setShowStatus(false)} 
+              onSetHotbar={handleSetHotbar} // ハンドラを渡す
+            />
+          )}
           
           {uiState.isCrafting && gameStateRef.current.activeCrafting && (
             <CraftingMenu 
