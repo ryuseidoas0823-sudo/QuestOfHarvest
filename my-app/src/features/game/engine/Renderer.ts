@@ -20,6 +20,7 @@ const drawCharacter = (
   // 影を描画
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.beginPath();
+  // ellipse は一部の環境で動作しない可能性があるため arc で代用（互換性重視）
   ctx.ellipse(centerX, y + h - 2, w / 2.5, h / 5, 0, 0, Math.PI * 2);
   ctx.fill();
 
@@ -231,6 +232,15 @@ export const renderGame = (
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, width, height);
 
+  // マップデータが存在しない場合はLoading表示をして処理を中断（クラッシュ防止）
+  if (!state.map || state.map.length === 0) {
+    ctx.fillStyle = '#fff';
+    ctx.font = '24px serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Generating World...', width / 2, height / 2);
+    return;
+  }
+
   ctx.save();
   ctx.translate(-state.camera.x, -state.camera.y);
 
@@ -243,7 +253,12 @@ export const renderGame = (
   for (let y = startRow; y <= endRow; y++) {
     for (let x = startCol; x <= endCol; x++) {
       if (y >= 0 && y < MAP_HEIGHT && x >= 0 && x < MAP_WIDTH) {
-        const tile = state.map[y][x];
+        // 安全にアクセスするためのチェック
+        const row = state.map[y];
+        if (!row) continue;
+        const tile = row[x];
+        if (!tile) continue;
+
         const px = x * TILE_SIZE;
         const py = y * TILE_SIZE;
         
