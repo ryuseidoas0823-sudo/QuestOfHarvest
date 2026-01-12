@@ -1,5 +1,6 @@
 import { EnemyEntity, EnemyRace, EnemyRank } from '../types';
-import { THEME } from '../../assets/theme';
+// 修正: 階層を一つ深くしました (../../ -> ../../../)
+import { THEME } from '../../../assets/theme';
 
 // 基本ステータス定義
 interface BaseStats {
@@ -164,28 +165,24 @@ export const generateEnemy = (
   isBoss: boolean = false,
   fixedRace?: EnemyRace
 ): EnemyEntity => {
-  // 1. 種族決定（指定がなければランダム、レベルに応じて強い種族が出やすくなる調整も可能だが今は均等）
+  // 1. 種族決定（指定がなければランダム）
   const races = Object.keys(RACE_STATS) as EnemyRace[];
-  // レベルが低い内はDragonなどを出しにくくするロジックを入れても良い
   const race = fixedRace || races[Math.floor(Math.random() * races.length)];
   
   const baseStat = RACE_STATS[race];
 
   // 2. 亜種決定
-  // レベルに応じて強い亜種が出るようにする
-  // 例: レベル1-5: 0番目, 5-10: 1番目...
   let variantData: VariantData;
   let rank: EnemyRank = 'Normal';
 
   if (isBoss) {
     rank = 'Boss';
-    // ボスは2種類。レベル50以上で強いほうが出るなど
+    // ボスは2種類。レベル30以上で強いほうが出るなど
     const bossIdx = level > 30 ? 1 : 0;
     variantData = BOSSES[race][bossIdx];
   } else {
     // 亜種は5種類。レベルに応じて重み付けランダム
     const variants = VARIANTS[race];
-    // 簡易ロジック: レベル/5 を基準インデックスとし、前後1つを含めてランダム
     let targetIdx = Math.floor(level / 5);
     targetIdx = Math.max(0, Math.min(variants.length - 1, targetIdx));
     
@@ -204,9 +201,7 @@ export const generateEnemy = (
 
   // 3. ステータス計算
   const levelMult = 1 + (level - 1) * 0.1; // レベル1上がるごとに10%強くなる
-  const rankMult = rank === 'Elite' ? 2.0 : rank === 'Boss' ? 1.0 : 1.0; // Boss倍率はvariantDataに含まれているとみなすか、ここで掛けるか。
-  // ここではBossのvariantData.multが高いのでrankMultは1.0で良いが、Eliteは別途強化
-
+  // Boss倍率はvariantData.multに含まれているので、ここではEliteのみ補正
   const totalMult = levelMult * variantData.mult * (rank === 'Elite' ? 1.5 : 1.0);
 
   return {
@@ -222,7 +217,7 @@ export const generateEnemy = (
     
     // Combat Stats
     level,
-    hp: Math.floor(baseStat.hp * totalMult * 5), // HPは少し高めに設定
+    hp: Math.floor(baseStat.hp * totalMult * 5),
     maxHp: Math.floor(baseStat.hp * totalMult * 5),
     mp: 0, maxMp: 0,
     attack: Math.floor(baseStat.attack * totalMult),
