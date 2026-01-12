@@ -1,6 +1,6 @@
 import { GAME_CONFIG } from '../../../assets/constants';
 import { THEME } from '../../../assets/theme';
-import { GameState, Entity, PlayerEntity, EnemyEntity, CompanionEntity, NPCEntity } from '../types';
+import { GameState, Entity, PlayerEntity, EnemyEntity, CompanionEntity, NPCEntity, CombatEntity, WeaponCategory } from '../types';
 
 /**
  * キャラクターを描画するヘルパー関数
@@ -14,54 +14,79 @@ const drawCharacter = (
   h: number,
   time: number
 ) => {
-  const centerX = x + w / 2;
-  const centerY = y + h / 2;
+  let drawX = x;
+  let drawY = y;
+  let rotation = 0;
+
+  // --- 攻撃モーション計算 ---
+  if (entity.type === 'player' || entity.type === 'companion' || entity.type === 'enemy' || entity.type === 'boss') {
+    const combatEntity = entity as CombatEntity;
+    if (combatEntity.isAttacking && combatEntity.attackStartTime) {
+      const elapsed = time - combatEntity.attackStartTime;
+      const duration = combatEntity.attackDuration || 200;
+      
+      if (elapsed < duration) {
+        // 突き刺し/踏み込みアクション
+        // 0.0 -> 1.0 (ピーク) -> 0.0
+        const progress = Math.sin((elapsed / duration) * Math.PI);
+        const forward = progress * 15; // 15px前に出る
+        
+        // 攻撃方向がなければデフォルトで右
+        const angle = combatEntity.attackDirection !== undefined ? combatEntity.attackDirection : 0;
+        
+        drawX += Math.cos(angle) * forward;
+        drawY += Math.sin(angle) * forward;
+      }
+    }
+  }
+
+  const centerX = drawX + w / 2;
+  const centerY = drawY + h / 2;
   
   // 影 (共通)
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.beginPath();
-  ctx.ellipse(centerX, y + h - 2, w / 2.5, h / 6, 0, 0, Math.PI * 2);
+  ctx.ellipse(centerX, drawY + h - 2, w / 2.5, h / 6, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // --- プレイヤー描画 (人型) ---
   if (entity.type === 'player') {
     // 足
-    ctx.fillStyle = '#1a237e'; // ズボン色
-    ctx.fillRect(x + w * 0.3, y + h * 0.6, w * 0.15, h * 0.35); // 左足
-    ctx.fillRect(x + w * 0.55, y + h * 0.6, w * 0.15, h * 0.35); // 右足
+    ctx.fillStyle = '#1a237e'; // ズボン
+    ctx.fillRect(drawX + w * 0.3, drawY + h * 0.6, w * 0.15, h * 0.35);
+    ctx.fillRect(drawX + w * 0.55, drawY + h * 0.6, w * 0.15, h * 0.35);
 
-    // 胴体 (鎧)
+    // 胴体
     ctx.fillStyle = '#5c6bc0';
-    ctx.fillRect(x + w * 0.2, y + h * 0.3, w * 0.6, h * 0.35);
-    ctx.fillStyle = '#e8eaf6'; // 胸当て
-    ctx.fillRect(x + w * 0.3, y + h * 0.35, w * 0.4, h * 0.25);
+    ctx.fillRect(drawX + w * 0.2, drawY + h * 0.3, w * 0.6, h * 0.35);
+    ctx.fillStyle = '#e8eaf6'; 
+    ctx.fillRect(drawX + w * 0.3, drawY + h * 0.35, w * 0.4, h * 0.25);
 
     // 頭
-    ctx.fillStyle = '#ffccbc'; // 肌色
+    ctx.fillStyle = '#ffccbc';
     ctx.beginPath();
-    ctx.arc(centerX, y + h * 0.2, w * 0.25, 0, Math.PI * 2);
+    ctx.arc(centerX, drawY + h * 0.2, w * 0.25, 0, Math.PI * 2);
     ctx.fill();
 
     // 髪
-    ctx.fillStyle = '#ffca28'; // 金髪
+    ctx.fillStyle = '#ffca28';
     ctx.beginPath();
-    ctx.arc(centerX, y + h * 0.18, w * 0.28, Math.PI, Math.PI * 2);
+    ctx.arc(centerX, drawY + h * 0.18, w * 0.28, Math.PI, Math.PI * 2);
     ctx.fill();
 
     // マント
     ctx.fillStyle = '#b71c1c';
     ctx.beginPath();
-    ctx.moveTo(x + w * 0.25, y + h * 0.35);
-    ctx.lineTo(x + w * 0.75, y + h * 0.35);
-    ctx.lineTo(x + w * 0.85, y + h * 0.8);
-    ctx.lineTo(x + w * 0.15, y + h * 0.8);
+    ctx.moveTo(drawX + w * 0.25, drawY + h * 0.35);
+    ctx.lineTo(drawX + w * 0.75, drawY + h * 0.35);
+    ctx.lineTo(drawX + w * 0.85, drawY + h * 0.8);
+    ctx.lineTo(drawX + w * 0.15, drawY + h * 0.8);
     ctx.fill();
 
-    // 武器 (剣)
-    ctx.fillStyle = '#cfd8dc';
-    ctx.fillRect(x + w * 0.75, y + h * 0.2, 4, 20); // 刀身
-    ctx.fillStyle = '#5d4037';
-    ctx.fillRect(x + w * 0.75, y + h * 0.6, 4, 6); // 柄
+    // 武器描画 (簡易)
+    const p = entity as PlayerEntity;
+    const weaponCat = p.equipment.mainHand?.weaponStats?.category || 'Sword';
+    drawWeapon(ctx, weaponCat, drawX, drawY, w, h, (p as any).isAttacking, (p as any).attackDirection);
 
   } 
   // --- 敵描画 (モンスター) ---
@@ -70,95 +95,147 @@ const drawCharacter = (
     ctx.fillStyle = e.color || '#ff0000';
 
     if (e.race === 'Slime') {
-      // スライム: 半円 + 底部波打ち
       ctx.beginPath();
-      ctx.arc(centerX, y + h * 0.7, w * 0.4, Math.PI, 0); // 上半分
-      ctx.lineTo(x + w * 0.9, y + h * 0.9);
-      ctx.quadraticCurveTo(centerX, y + h, x + w * 0.1, y + h * 0.9);
+      ctx.arc(centerX, drawY + h * 0.7, w * 0.4, Math.PI, 0); 
+      ctx.lineTo(drawX + w * 0.9, drawY + h * 0.9);
+      ctx.quadraticCurveTo(centerX, drawY + h, drawX + w * 0.1, drawY + h * 0.9);
       ctx.fill();
-      // 目
       ctx.fillStyle = 'white';
-      ctx.beginPath(); ctx.arc(x + w*0.35, y + h*0.6, 3, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(x + w*0.65, y + h*0.6, 3, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(drawX + w*0.35, drawY + h*0.6, 3, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(drawX + w*0.65, drawY + h*0.6, 3, 0, Math.PI*2); ctx.fill();
       
     } else if (e.race === 'Goblin' || e.race === 'Orc') {
-      // ゴブリン/オーク: 耳の長い人型
-      ctx.fillRect(x + w*0.25, y + h*0.4, w*0.5, h*0.4); // 体
-      ctx.beginPath(); ctx.arc(centerX, y + h*0.3, w*0.3, 0, Math.PI*2); ctx.fill(); // 頭
-      // 耳
+      ctx.fillRect(drawX + w*0.25, drawY + h*0.4, w*0.5, h*0.4); 
+      ctx.beginPath(); ctx.arc(centerX, drawY + h*0.3, w*0.3, 0, Math.PI*2); ctx.fill(); 
       ctx.beginPath(); 
-      ctx.moveTo(x + w*0.2, y + h*0.25); ctx.lineTo(x, y + h*0.1); ctx.lineTo(x + w*0.2, y + h*0.35); ctx.fill();
-      ctx.moveTo(x + w*0.8, y + h*0.25); ctx.lineTo(x + w, y + h*0.1); ctx.lineTo(x + w*0.8, y + h*0.35); ctx.fill();
-      // 棍棒
+      ctx.moveTo(drawX + w*0.2, drawY + h*0.25); ctx.lineTo(drawX, drawY + h*0.1); ctx.lineTo(drawX + w*0.2, drawY + h*0.35); ctx.fill();
+      ctx.moveTo(drawX + w*0.8, drawY + h*0.25); ctx.lineTo(drawX + w, drawY + h*0.1); ctx.lineTo(drawX + w*0.8, drawY + h*0.35); ctx.fill();
+      // 武器 (棍棒)
       ctx.fillStyle = '#8d6e63';
-      ctx.beginPath(); ctx.ellipse(x + w*0.85, y + h*0.5, 4, 12, Math.PI/4, 0, Math.PI*2); ctx.fill();
-
-    } else if (e.race === 'Bat') {
-      // コウモリ: 翼と小さな体
-      ctx.beginPath(); ctx.arc(centerX, y + h*0.5, w*0.15, 0, Math.PI*2); ctx.fill(); // 体
-      // 翼 (アニメーション: 羽ばたき)
-      const wingOffset = Math.sin(time / 100) * 5;
-      ctx.beginPath();
-      ctx.moveTo(centerX, y + h*0.5);
-      ctx.quadraticCurveTo(x, y + h*0.2 + wingOffset, x, y + h*0.5);
-      ctx.lineTo(centerX, y + h*0.6);
-      ctx.moveTo(centerX, y + h*0.5);
-      ctx.quadraticCurveTo(x + w, y + h*0.2 + wingOffset, x + w, y + h*0.5);
-      ctx.lineTo(centerX, y + h*0.6);
-      ctx.fill();
+      ctx.beginPath(); ctx.ellipse(drawX + w*0.85, drawY + h*0.5, 4, 12, Math.PI/4, 0, Math.PI*2); ctx.fill();
 
     } else if (e.race === 'Ghost') {
-      // ゴースト: 浮遊感
+      // 浮遊アニメーション
       const floatY = Math.sin(time / 200) * 3;
       ctx.beginPath();
-      ctx.arc(centerX, y + h*0.3 + floatY, w*0.35, Math.PI, 0);
-      ctx.lineTo(x + w*0.85, y + h*0.9 + floatY);
-      ctx.lineTo(centerX, y + h*0.8 + floatY);
-      ctx.lineTo(x + w*0.15, y + h*0.9 + floatY);
+      ctx.arc(centerX, drawY + h*0.3 + floatY, w*0.35, Math.PI, 0);
+      ctx.lineTo(drawX + w*0.85, drawY + h*0.9 + floatY);
+      ctx.lineTo(centerX, drawY + h*0.8 + floatY);
+      ctx.lineTo(drawX + w*0.15, drawY + h*0.9 + floatY);
       ctx.fill();
-      // 目 (黒)
       ctx.fillStyle = 'black';
-      ctx.beginPath(); ctx.arc(x + w*0.4, y + h*0.35 + floatY, 3, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(x + w*0.6, y + h*0.35 + floatY, 3, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(drawX + w*0.4, drawY + h*0.35 + floatY, 3, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(drawX + w*0.6, drawY + h*0.35 + floatY, 3, 0, Math.PI*2); ctx.fill();
 
     } else {
-      // その他 (Skeleton, Wolfなど): 汎用モンスター形状
-      ctx.fillRect(x + w*0.2, y + h*0.3, w*0.6, h*0.5);
-      ctx.beginPath(); ctx.arc(centerX, y + h*0.25, w*0.25, 0, Math.PI*2); ctx.fill();
+      // 汎用
+      ctx.fillRect(drawX + w*0.2, drawY + h*0.3, w*0.6, h*0.5);
+      ctx.beginPath(); ctx.arc(centerX, drawY + h*0.25, w*0.25, 0, Math.PI*2); ctx.fill();
     }
 
-    // ボスの強調
     if (e.type === 'boss') {
       ctx.strokeStyle = '#ffd700';
       ctx.lineWidth = 3;
-      ctx.strokeRect(x - 2, y - 2, w + 4, h + 4);
+      ctx.strokeRect(drawX - 2, drawY - 2, w + 4, h + 4);
     }
 
   } 
   // --- その他 (NPC, 仲間) ---
   else {
-    // 仲間やNPCは簡易人型
     ctx.fillStyle = entity.color;
-    ctx.fillRect(x + w * 0.25, y + h * 0.35, w * 0.5, h * 0.5); // 体
+    ctx.fillRect(drawX + w * 0.25, drawY + h * 0.35, w * 0.5, h * 0.5); 
     
-    // 頭
     ctx.fillStyle = '#ffccbc';
-    ctx.beginPath(); ctx.arc(centerX, y + h * 0.2, w * 0.25, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(centerX, drawY + h * 0.2, w * 0.25, 0, Math.PI * 2); ctx.fill();
     
-    // 髪/帽子
     ctx.fillStyle = entity.color;
-    ctx.beginPath(); ctx.arc(centerX, y + h * 0.18, w * 0.28, Math.PI, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(centerX, drawY + h * 0.18, w * 0.28, Math.PI, Math.PI * 2); ctx.fill();
 
-    // 職業別アイコン (仲間)
     if (entity.type === 'companion') {
+      const c = entity as CompanionEntity;
       ctx.fillStyle = 'white';
       ctx.font = '10px sans-serif';
       ctx.textAlign = 'center';
-      const job = (entity as CompanionEntity).job;
-      const icon = job === 'Warrior' ? '🛡️' : job === 'Mage' ? '🪄' : job === 'Archer' ? '🏹' : '✚';
-      ctx.fillText(icon, centerX, y - 5);
+      const icon = c.job === 'Warrior' ? '🛡️' : c.job === 'Mage' ? '🪄' : c.job === 'Archer' ? '🏹' : '✚';
+      ctx.fillText(icon, centerX, drawY - 5);
+      
+      // 仲間の武器
+      let cat: WeaponCategory = 'Sword';
+      if (c.job === 'Mage') cat = 'Fist'; // 杖っぽく
+      if (c.job === 'Archer') cat = 'Fist'; // 弓（未実装なので素手扱い）
+      if (c.job === 'Cleric') cat = 'Hammer';
+      drawWeapon(ctx, cat, drawX, drawY, w, h, c.isAttacking, c.attackDirection);
     }
   }
+};
+
+const drawWeapon = (
+  ctx: CanvasRenderingContext2D,
+  category: WeaponCategory,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  isAttacking?: boolean,
+  angle?: number
+) => {
+  ctx.save();
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+  
+  // 攻撃方向へ回転
+  let rot = 0;
+  let offsetX = w * 0.3;
+  let offsetY = h * 0.2;
+
+  if (isAttacking && angle !== undefined) {
+    // 攻撃中は角度に合わせて回転
+    ctx.translate(cx, cy);
+    ctx.rotate(angle + Math.PI / 2); // 剣先を向ける
+    ctx.translate(-cx, -cy);
+    offsetX = 0; // 中心から描画
+    offsetY = -10; // 少し前へ
+  }
+
+  const wx = x + w * 0.5 + offsetX;
+  const wy = y + h * 0.3 + offsetY;
+
+  if (category === 'Sword') {
+    ctx.fillStyle = '#b0bec5'; // 刃
+    ctx.fillRect(wx, wy - 15, 4, 15);
+    ctx.fillStyle = '#5d4037'; // 柄
+    ctx.fillRect(wx, wy, 4, 6);
+    ctx.fillStyle = '#ffd700'; // 鍔
+    ctx.fillRect(wx - 4, wy - 2, 12, 2);
+  } else if (category === 'Spear') {
+    ctx.fillStyle = '#8d6e63'; // 柄
+    ctx.fillRect(wx, wy - 20, 2, 25);
+    ctx.fillStyle = '#b0bec5'; // 穂先
+    ctx.beginPath();
+    ctx.moveTo(wx + 1, wy - 20);
+    ctx.lineTo(wx - 2, wy - 25);
+    ctx.lineTo(wx + 4, wy - 25);
+    ctx.fill();
+  } else if (category === 'Axe') {
+    ctx.fillStyle = '#8d6e63'; // 柄
+    ctx.fillRect(wx, wy - 15, 3, 20);
+    ctx.fillStyle = '#78909c'; // 刃
+    ctx.beginPath();
+    ctx.arc(wx + 1, wy - 12, 8, 0, Math.PI, true);
+    ctx.fill();
+  } else if (category === 'Hammer') {
+    ctx.fillStyle = '#5d4037'; // 柄
+    ctx.fillRect(wx, wy - 15, 3, 20);
+    ctx.fillStyle = '#424242'; // 頭
+    ctx.fillRect(wx - 5, wy - 18, 13, 8);
+  } else if (category === 'Dagger') {
+    ctx.fillStyle = '#b0bec5';
+    ctx.fillRect(wx, wy - 8, 3, 8);
+    ctx.fillStyle = '#5d4037';
+    ctx.fillRect(wx, wy, 3, 4);
+  }
+  
+  ctx.restore();
 };
 
 /**
@@ -188,7 +265,6 @@ export const renderGame = (
     }
 
     ctx.save();
-    // カメラ位置の整数化 (描画ズレ防止)
     const camX = Math.floor(state.camera.x);
     const camY = Math.floor(state.camera.y);
     ctx.translate(-camX, -camY);
@@ -228,7 +304,6 @@ export const renderGame = (
         
         ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
 
-        // 特殊タイルの文字表示
         if (tile.type === 'town_entrance') {
           ctx.fillStyle = '#fff';
           ctx.font = '20px sans-serif';
@@ -301,7 +376,7 @@ export const renderGame = (
       ctx.globalAlpha = 1.0;
     }
 
-    // 攻撃範囲ガイド
+    // マウスカーソル (攻撃範囲)
     const weapon = state.player?.equipment?.mainHand?.weaponStats;
     if (state.mode === 'combat' && weapon) {
       ctx.strokeStyle = 'rgba(255, 0, 0, 0.3)';
@@ -310,10 +385,18 @@ export const renderGame = (
       const py = state.player.y + state.player.height / 2;
       const mx = input.mouse.x + camX;
       const my = input.mouse.y + camY;
-      
+      const angle = Math.atan2(my - py, mx - px);
+      const range = weapon.range * TILE_SIZE;
+
       ctx.beginPath();
-      ctx.moveTo(px, py);
-      ctx.lineTo(mx, my);
+      if (weapon.shape === 'line') {
+        ctx.moveTo(px, py);
+        ctx.lineTo(px + Math.cos(angle) * range, py + Math.sin(angle) * range);
+      } else {
+        const halfAngle = (weapon.width * Math.PI / 180) / 2;
+        ctx.arc(px, py, range, angle - halfAngle, angle + halfAngle);
+        ctx.lineTo(px, py);
+      }
       ctx.stroke();
     }
 
