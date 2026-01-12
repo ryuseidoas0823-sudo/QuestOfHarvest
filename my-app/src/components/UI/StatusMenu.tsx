@@ -10,21 +10,36 @@ interface StatusMenuProps {
 export const StatusMenu: React.FC<StatusMenuProps> = ({ player, companions, onClose }) => {
   const [selectedTab, setSelectedTab] = useState<'player' | number>('player');
 
+  // 表示するエンティティを選択
   const currentEntity = selectedTab === 'player' ? player : companions[selectedTab];
-  const expPercent = Math.min(100, (currentEntity.exp / currentEntity.maxExp) * 100);
+  const isPlayer = currentEntity.type === 'player';
+
+  // 経験値の計算 (プレイヤーのみXPを持つ仕様のため、仲間は仮表示)
+  const currentExp = isPlayer ? (currentEntity as PlayerEntity).xp : 0;
+  const nextExp = isPlayer ? (currentEntity as PlayerEntity).nextLevelXp : 1;
+  const expPercent = Math.min(100, (currentExp / nextExp) * 100);
+
+  // 装備情報の取得 (プレイヤーは装備を持つが、仲間は固定装備等の扱い)
+  const mainHand = isPlayer ? (currentEntity as PlayerEntity).equipment.mainHand : null;
+  const weaponName = mainHand ? mainHand.name : (isPlayer ? 'Empty' : 'Default Weapon');
+  
+  // 防具は現行の型定義(types.ts)でPlayerEntity.equipmentにarmorが含まれていないため、
+  // 将来的な拡張を見越して仮表示、またはinventoryから検索するロジックが必要ですが、
+  // ここではシンプルに「None」または防御力からの推定とします。
+  const armorName = 'Clothes'; // 仮
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm">
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm select-none">
       <div className="bg-slate-800 w-[700px] max-w-[95%] h-[550px] max-h-[90%] rounded-xl shadow-2xl flex flex-col border border-slate-600 overflow-hidden text-white">
         
         {/* Header */}
         <div className="flex justify-between items-center p-4 bg-slate-900 border-b border-slate-700">
-          <h2 className="text-xl font-bold flex items-center gap-2">
+          <h2 className="text-xl font-bold flex items-center gap-2 text-[#d4af37] font-serif">
             <span className="text-2xl">📜</span> Status
           </h2>
           <button 
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors text-gray-400 hover:text-white"
           >
             ✕
           </button>
@@ -43,7 +58,7 @@ export const StatusMenu: React.FC<StatusMenuProps> = ({ player, companions, onCl
                   : 'border-transparent text-gray-400'
               }`}
             >
-              <span className="font-bold truncate">{player.name}</span>
+              <span className="font-bold truncate text-sm">{player.id === 'player_1' ? 'Hero' : 'Player'}</span>
               <span className="text-xs text-yellow-500">Lv.{player.level} Hero</span>
             </button>
 
@@ -57,8 +72,8 @@ export const StatusMenu: React.FC<StatusMenuProps> = ({ player, companions, onCl
                     : 'border-transparent text-gray-400'
                 }`}
               >
-                <span className="font-bold truncate">{comp.name}</span>
-                <span className="text-xs text-blue-400">Lv.{comp.level} {(comp as any).role || 'Companion'}</span>
+                <span className="font-bold truncate text-sm">{comp.job}</span>
+                <span className="text-xs text-blue-400">Lv.{comp.level} Companion</span>
               </button>
             ))}
           </div>
@@ -68,22 +83,32 @@ export const StatusMenu: React.FC<StatusMenuProps> = ({ player, companions, onCl
             <div className="flex items-start gap-6 mb-8">
               {/* Avatar Placeholder */}
               <div 
-                className="w-20 h-20 rounded-lg shadow-inner flex items-center justify-center text-3xl border-2 border-white/20"
+                className="w-20 h-20 rounded-lg shadow-inner flex items-center justify-center text-4xl border-2 border-white/20 relative overflow-hidden"
                 style={{ backgroundColor: currentEntity.color || '#666' }}
               >
+                <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-black/20" />
                 {selectedTab === 'player' ? '🧙‍♂️' : '🛡️'}
               </div>
               
               {/* Name & Level */}
               <div>
-                <h3 className="text-3xl font-bold mb-1">{currentEntity.name}</h3>
-                <div className="flex gap-3 text-sm">
-                  <span className="px-2 py-0.5 rounded bg-slate-700 border border-slate-600">
-                    Lv. <span className="text-yellow-400 font-bold">{currentEntity.level}</span>
-                  </span>
-                  <span className="px-2 py-0.5 rounded bg-slate-700 border border-slate-600 text-gray-300">
-                    Next Lv: {currentEntity.maxExp - currentEntity.exp} EXP
-                  </span>
+                <h3 className="text-3xl font-bold mb-1 font-serif text-[#d4af37]">
+                  {selectedTab === 'player' ? 'Hero' : (currentEntity as CompanionEntity).job}
+                </h3>
+                <div className="flex flex-col gap-1 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded bg-slate-700 border border-slate-600 text-xs">
+                      Lv. <span className="text-yellow-400 font-bold">{currentEntity.level}</span>
+                    </span>
+                    {!isPlayer && (
+                      <span className="text-blue-300 text-xs">{(currentEntity as CompanionEntity).job}</span>
+                    )}
+                  </div>
+                  {isPlayer && (
+                    <span className="text-gray-400 text-xs">
+                      Next Lv: {Math.max(0, nextExp - currentExp)} EXP
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -91,107 +116,118 @@ export const StatusMenu: React.FC<StatusMenuProps> = ({ player, companions, onCl
             <div className="grid grid-cols-2 gap-8">
               
               {/* Stats Column */}
-              <div className="space-y-4">
-                <h4 className="text-sm uppercase tracking-wider text-gray-400 border-b border-gray-700 pb-1">Attributes</h4>
+              <div className="space-y-5">
+                <h4 className="text-xs uppercase tracking-widest text-gray-500 border-b border-gray-700 pb-1 font-bold">Attributes</h4>
                 
                 {/* HP/MP Bars */}
-                <div className="space-y-3">
+                <div className="space-y-4">
+                  {/* HP */}
                   <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>HP</span>
-                      <span className="font-mono">{Math.floor(currentEntity.hp)} / {currentEntity.maxHp}</span>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-gray-300 font-bold">HP</span>
+                      <span className="font-mono text-gray-400">{Math.floor(currentEntity.hp)} / {currentEntity.maxHp}</span>
                     </div>
-                    <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                    <div className="h-2.5 bg-slate-900 rounded-full overflow-hidden border border-slate-700">
                       <div 
-                        className="h-full bg-green-500 transition-all duration-300" 
+                        className="h-full bg-gradient-to-r from-red-600 to-red-500 transition-all duration-300" 
                         style={{ width: `${(currentEntity.hp / currentEntity.maxHp) * 100}%` }}
                       />
                     </div>
                   </div>
+
+                  {/* MP */}
                   <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>MP</span>
-                      <span className="font-mono">{Math.floor(currentEntity.mp)} / {currentEntity.maxMp}</span>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-gray-300 font-bold">MP</span>
+                      <span className="font-mono text-gray-400">{Math.floor(currentEntity.mp)} / {currentEntity.maxMp}</span>
                     </div>
-                    <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                    <div className="h-2.5 bg-slate-900 rounded-full overflow-hidden border border-slate-700">
                       <div 
-                        className="h-full bg-blue-500 transition-all duration-300" 
+                        className="h-full bg-gradient-to-r from-blue-600 to-blue-500 transition-all duration-300" 
                         style={{ width: `${(currentEntity.mp / currentEntity.maxMp) * 100}%` }}
                       />
                     </div>
                   </div>
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>EXP</span>
-                      <span className="font-mono">{Math.floor(expPercent)}%</span>
+
+                  {/* EXP (Player only) */}
+                  {isPlayer && (
+                    <div>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-gray-300 font-bold">EXP</span>
+                        <span className="font-mono text-gray-400">{Math.floor(expPercent)}%</span>
+                      </div>
+                      <div className="h-2.5 bg-slate-900 rounded-full overflow-hidden border border-slate-700">
+                        <div 
+                          className="h-full bg-gradient-to-r from-yellow-600 to-yellow-500 transition-all duration-300" 
+                          style={{ width: `${expPercent}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-yellow-500 transition-all duration-300" 
-                        style={{ width: `${expPercent}%` }}
-                      />
-                    </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Numerical Stats */}
-                <div className="grid grid-cols-2 gap-4 mt-4 bg-slate-900/30 p-4 rounded-lg">
-                  <div>
-                    <div className="text-gray-400 text-xs">ATK</div>
-                    <div className="text-xl font-mono">{currentEntity.stats.attack}</div>
+                <div className="grid grid-cols-2 gap-3 mt-4">
+                  <div className="bg-slate-900/50 p-2 rounded border border-slate-700/50">
+                    <div className="text-gray-500 text-[10px] uppercase">Attack</div>
+                    <div className="text-lg font-mono text-red-300">{currentEntity.attack}</div>
                   </div>
-                  <div>
-                    <div className="text-gray-400 text-xs">DEF</div>
-                    <div className="text-xl font-mono">{currentEntity.stats.defense}</div>
+                  <div className="bg-slate-900/50 p-2 rounded border border-slate-700/50">
+                    <div className="text-gray-500 text-[10px] uppercase">Defense</div>
+                    <div className="text-lg font-mono text-blue-300">{currentEntity.defense}</div>
                   </div>
-                  <div>
-                    <div className="text-gray-400 text-xs">SPD</div>
-                    <div className="text-xl font-mono">{currentEntity.stats.speed}</div>
+                  <div className="bg-slate-900/50 p-2 rounded border border-slate-700/50">
+                    <div className="text-gray-500 text-[10px] uppercase">Speed</div>
+                    <div className="text-lg font-mono text-green-300">{currentEntity.speed.toFixed(1)}</div>
                   </div>
-                  <div>
-                    <div className="text-gray-400 text-xs">LUCK</div>
-                    <div className="text-xl font-mono">-</div>
-                  </div>
+                  {isPlayer && (
+                    <div className="bg-slate-900/50 p-2 rounded border border-slate-700/50">
+                      <div className="text-gray-500 text-[10px] uppercase">Gold</div>
+                      <div className="text-lg font-mono text-yellow-300">{(currentEntity as PlayerEntity).gold}</div>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Equipment Column */}
-              <div className="space-y-4">
-                <h4 className="text-sm uppercase tracking-wider text-gray-400 border-b border-gray-700 pb-1">Equipment</h4>
+              <div className="space-y-5">
+                <h4 className="text-xs uppercase tracking-widest text-gray-500 border-b border-gray-700 pb-1 font-bold">Equipment</h4>
                 
                 <div className="space-y-3">
-                  <div className="bg-slate-900/30 p-3 rounded-lg flex items-center gap-3">
-                    <div className="w-10 h-10 bg-slate-800 rounded border border-slate-600 flex items-center justify-center text-xl">
+                  {/* Weapon */}
+                  <div className="bg-slate-900/40 p-3 rounded-lg flex items-center gap-3 border border-slate-700/50 hover:bg-slate-800/60 transition-colors cursor-help">
+                    <div className="w-10 h-10 bg-slate-800 rounded border border-slate-600 flex items-center justify-center text-xl shadow-inner">
                       ⚔️
                     </div>
-                    <div>
-                      <div className="text-xs text-gray-400">Weapon</div>
-                      <div className={`font-medium ${currentEntity.equipment.weapon ? 'text-white' : 'text-gray-500 italic'}`}>
-                        {currentEntity.equipment.weapon ? currentEntity.equipment.weapon.name : 'Empty'}
+                    <div className="overflow-hidden">
+                      <div className="text-[10px] text-gray-500 uppercase tracking-wider">Main Hand</div>
+                      <div className={`font-medium truncate ${weaponName !== 'Empty' ? 'text-gray-200' : 'text-gray-600 italic'}`}>
+                        {weaponName}
                       </div>
                     </div>
                   </div>
 
-                  <div className="bg-slate-900/30 p-3 rounded-lg flex items-center gap-3">
-                    <div className="w-10 h-10 bg-slate-800 rounded border border-slate-600 flex items-center justify-center text-xl">
+                  {/* Armor */}
+                  <div className="bg-slate-900/40 p-3 rounded-lg flex items-center gap-3 border border-slate-700/50 hover:bg-slate-800/60 transition-colors cursor-help">
+                    <div className="w-10 h-10 bg-slate-800 rounded border border-slate-600 flex items-center justify-center text-xl shadow-inner">
                       🛡️
                     </div>
-                    <div>
-                      <div className="text-xs text-gray-400">Armor</div>
-                      <div className={`font-medium ${currentEntity.equipment.armor ? 'text-white' : 'text-gray-500 italic'}`}>
-                        {currentEntity.equipment.armor ? currentEntity.equipment.armor.name : 'Empty'}
+                    <div className="overflow-hidden">
+                      <div className="text-[10px] text-gray-500 uppercase tracking-wider">Body</div>
+                      <div className={`font-medium truncate ${armorName !== 'None' ? 'text-gray-200' : 'text-gray-600 italic'}`}>
+                        {armorName}
                       </div>
                     </div>
                   </div>
                   
                   {/* Accessories placeholder */}
-                  <div className="bg-slate-900/30 p-3 rounded-lg flex items-center gap-3 opacity-50">
-                    <div className="w-10 h-10 bg-slate-800 rounded border border-slate-600 flex items-center justify-center text-xl">
+                  <div className="bg-slate-900/20 p-3 rounded-lg flex items-center gap-3 border border-slate-800 opacity-60">
+                    <div className="w-10 h-10 bg-slate-800 rounded border border-slate-700 flex items-center justify-center text-xl grayscale opacity-50">
                       💍
                     </div>
                     <div>
-                      <div className="text-xs text-gray-400">Accessory</div>
-                      <div className="text-gray-500 italic">Locked</div>
+                      <div className="text-[10px] text-gray-600 uppercase tracking-wider">Accessory</div>
+                      <div className="text-gray-600 italic text-sm">Locked</div>
                     </div>
                   </div>
 
