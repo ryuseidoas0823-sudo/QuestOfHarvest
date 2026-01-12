@@ -1,222 +1,214 @@
-// ゲーム全体で使用される型定義
+import React, { useEffect, useRef, useState } from 'react';
+import { GAME_CONFIG } from '../../assets/constants';
+import { useGameInput } from '../../hooks/useGameInput';
+import { GameState, Job } from './types';
+import { renderGame } from './engine/Renderer';
+import { updateGame } from './engine/GameLoop';
+import { HUD } from '../../components/UI/HUD';
+import { StatusMenu } from '../../components/UI/StatusMenu';
+import { JobSelectionScreen } from '../../components/UI/JobSelectionScreen'; 
+import { AuthOverlay } from '../auth/AuthOverlay';
+import { getAuth, onAuthStateChanged, User } from 'firebase/auth';
+import { generateWorldChunk } from './world/MapGenerator';
+import { createPlayer } from './entities/Player';
 
-export type TileType = 
-  | 'grass' | 'dirt' | 'wall' | 'water' | 'crop' 
-  | 'mountain' | 'dungeon_entrance' | 'stairs_down' | 'portal_out'
-  | 'town_entrance' | 'shop_floor';
-
-export interface Tile {
-  x: number;
-  y: number;
-  type: TileType;
-  solid: boolean;
-  cropGrowth?: number;
-  meta?: any; 
-}
-
-// アイテム・装備関連
-export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'unique';
-export type ItemType = 'consumable' | 'weapon' | 'armor' | 'material';
-export type WeaponCategory = 'Sword' | 'Spear' | 'Axe' | 'Dagger' | 'Hammer' | 'Fist';
-export type AttackShape = 'arc' | 'line';
-
-export interface WeaponStats {
-  category: WeaponCategory;
-  slash: number;
-  blunt: number;
-  pierce: number;
-  attackSpeed: number;
-  range: number;
-  width: number;
-  shape: AttackShape;
-  knockback: number;
-  hitRate: number;
-  critRate: number;
-  isDualWield?: boolean;
-}
-
-export type EnchantType = 'stat_boost' | 'speed_up' | 'magic_add' | 'extra_dmg' | 'range_up' | 'crit_rate' | 'crit_dmg' | 'hit_rate' | 'evade' | 'drop_rate';
-
-export interface Enchantment {
-  type: EnchantType;
-  value: number;
-  tier: 'weak' | 'medium' | 'strong';
-  description: string;
-}
-
-export type SpecialEffectType = 'party_atk' | 'party_def' | 'party_speed' | 'levitate' | 'magic_resist' | 'move_speed';
-
-export interface SpecialEffect {
-  type: SpecialEffectType;
-  value: number;
-  description: string;
-}
-
-export interface Item {
-  id: string;
-  name: string;
-  type: ItemType;
-  rarity: Rarity;
-  level: number;
-  value: number;
-  icon?: string;
-  weaponStats?: WeaponStats;
-  enchantments?: Enchantment[];
-  specialEffect?: SpecialEffect;
-  stats?: { defense?: number; hp?: number; mp?: number; };
-  isBossDrop?: boolean;
-}
-
-export interface InventoryItem extends Item {
-  instanceId: string;
-}
-
-// ワールドオブジェクト
-export interface Chest {
-  id: string;
-  x: number;
-  y: number;
-  opened: boolean;
-  contents: Item[];
-}
-
-export interface DroppedItem {
-  id: string;
-  item: Item;
-  x: number;
-  y: number;
-  life: number;
-}
-
-// エンティティ
-export type EntityType = 'player' | 'enemy' | 'item' | 'boss' | 'npc' | 'companion';
-
-// Job定義を拡張: Swordsman, Monkを追加 (Mageなどは仲間のために維持)
-export type Job = 'Swordsman' | 'Warrior' | 'Mage' | 'Archer' | 'Cleric' | 'Monk';
-
-export type EnemyRace = 'Slime' | 'Goblin' | 'Skeleton' | 'Wolf' | 'Orc' | 'Ghost' | 'Golem' | 'Bat' | 'Spider' | 'Dragon';
-export type EnemyRank = 'Normal' | 'Elite' | 'Boss';
-
-export interface Entity {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  color: string;
-  speed: number;
-  type: EntityType;
-  dead: boolean;
-}
-
-export interface CombatEntity extends Entity {
-  hp: number;
-  maxHp: number;
-  mp: number;
-  maxMp: number;
-  level: number;
-  defense: number;
-  attack: number;
-  job?: Job;
+export const GameScreen: React.FC = () => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const requestRef = useRef<number>();
   
-  // 戦闘・アニメーション状態
-  lastAttackTime?: number;
-  isAttacking?: boolean;      // 攻撃モーション中フラグ
-  attackStartTime?: number;   // 攻撃開始時刻
-  attackDuration?: number;    // モーション時間 (ms)
-  attackDirection?: number;   // 攻撃方向 (ラジアン)
-}
+  const gameStateRef = useRef<GameState | null>(null);
 
-export interface PlayerEntity extends CombatEntity {
-  type: 'player';
-  job: Job; // プレイヤーはJob必須
-  stamina: number;
-  inventory: InventoryItem[];
-  equipment: { mainHand?: InventoryItem; armor?: InventoryItem; accessory?: InventoryItem; };
-  gold: number;
-  xp: number;
-  nextLevelXp: number;
-  stats: {
-    attack: number;
-    defense: number;
-    speed: number;
-    magic: number;
-  };
-}
+  // UI State
+  const [uiState, setUiState] = useState<{
+    playerHp: number;
+    playerMaxHp: number;
+    playerMp: number;
+    playerMaxMp: number;
+    playerExp: number;
+    playerMaxExp: number;
+    playerLevel: number;
+    floor: number;
+    dialogue: { name: string, text: string } | null;
+  } | null>(null);
 
-export interface CompanionEntity extends CombatEntity {
-  type: 'companion';
-  joinDate: number;
-}
+  const [showStatus, setShowStatus] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  
+  // Job Selection State
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
 
-export type NPCRole = 'inn' | 'weapon' | 'item' | 'revive' | 'recruit' | 'villager';
+  const { keys, mouse, handlers } = useGameInput();
 
-export interface NPCEntity extends Entity {
-  type: 'npc';
-  role: NPCRole;
-  name: string;
-  dialogue: string[];
-  shopInventory?: Item[];
-  recruitList?: CompanionEntity[];
-}
+  // Auth Listener
+  useEffect(() => {
+    const auth = getAuth();
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+    });
+    return () => unsubscribe();
+  }, []);
 
-export interface EnemyEntity extends CombatEntity {
-  type: 'enemy' | 'boss';
-  race: EnemyRace;
-  variant: string;
-  rank: EnemyRank;
-  targetId?: string | null;
-  dropRate: number;
-  isBoss?: boolean;
-}
+  // Initialization & Game Loop
+  useEffect(() => {
+    if (!selectedJob) return; // 職業が選択されるまでゲームを開始しない
+    if (!canvasRef.current) return;
 
-export interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  color: string;
-  size: number;
-}
+    const ctx = canvasRef.current.getContext('2d');
+    if (!ctx) return;
 
-// 設定・難易度
-export type Difficulty = 'easy' | 'normal' | 'hard' | 'expert';
+    // Initialize Game State if not exists
+    if (!gameStateRef.current) {
+      const initialMap = generateWorldChunk(0, 0);
+      const initialPlayer = createPlayer(selectedJob); // 選択された職業を渡す
+      initialPlayer.x = initialMap.spawnPoint.x;
+      initialPlayer.y = initialMap.spawnPoint.y;
 
-export interface GameSettings {
-  masterVolume: number;
-  gameSpeed: number;
-  difficulty: Difficulty;
-}
+      gameStateRef.current = {
+        isPaused: false,
+        gameTime: 0,
+        camera: { x: 0, y: 0 },
+        player: initialPlayer,
+        party: [],
+        companions: [],
+        map: initialMap.map,
+        chests: initialMap.chests,
+        npcs: initialMap.npcs,
+        enemies: [],
+        droppedItems: [],
+        particles: [],
+        location: { type: 'world', level: 0, worldX: 0, worldY: 0 },
+        mode: 'combat',
+        settings: { difficulty: 'normal', gameSpeed: 1.0, volume: 0.5, showDamage: true },
+        dialogue: null,
+        activeShop: null,
+      };
+    }
 
-// マップロケーション情報
-export interface LocationInfo {
-  type: 'world' | 'dungeon' | 'town';
-  worldX: number;
-  worldY: number;
-  level: number;       
-  maxDepth?: number;   
-  dungeonId?: string;  
-  difficultyMult?: number; 
-  townId?: string;
-  mapsSinceLastTown?: number;
-}
+    const loop = (time: number) => {
+      if (gameStateRef.current && !gameStateRef.current.isPaused) {
+        const state = gameStateRef.current;
 
-export interface GameState {
-  map: Tile[][];
-  player: PlayerEntity;
-  party: CompanionEntity[];
-  enemies: EnemyEntity[];
-  npcs: NPCEntity[];
-  particles: Particle[];
-  chests: Chest[];
-  droppedItems: DroppedItem[];
-  camera: { x: number; y: number };
-  mode: 'combat' | 'build';
-  settings: GameSettings;
-  location: LocationInfo; 
-  activeShop?: NPCEntity | null;
-  dialogue?: { name: string, text: string } | null;
-  isPaused: boolean;
-  gameTime: number;
-}
+        const inputState = {
+          keys: keys.current,
+          mouse: mouse.current
+        };
+
+        updateGame(state, inputState, false);
+        renderGame(ctx, state, { mouse: mouse.current });
+
+        setUiState(prev => {
+          if (!prev || 
+              prev.playerHp !== state.player.hp || 
+              prev.floor !== state.location.level ||
+              prev.dialogue !== state.dialogue
+             ) {
+             return {
+               playerHp: state.player.hp,
+               playerMaxHp: state.player.maxHp,
+               playerMp: state.player.mp,
+               playerMaxMp: state.player.maxMp,
+               playerExp: state.player.exp,
+               playerMaxExp: state.player.maxExp,
+               playerLevel: state.player.level,
+               floor: state.location.level,
+               dialogue: state.dialogue || null
+             };
+          }
+          return prev;
+        });
+      }
+      requestRef.current = requestAnimationFrame(loop);
+    };
+
+    requestRef.current = requestAnimationFrame(loop);
+
+    return () => {
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+    };
+  }, [selectedJob]); // selectedJobが変わったら実行（初期化）
+
+  // Key Event Listener for Menu
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // ゲーム開始後のみメニューを開ける
+      if (selectedJob && (e.key === 'Escape' || e.key === 'm' || e.key === 'M')) {
+        setShowStatus(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedJob]);
+
+
+  return (
+    <div 
+      className="relative w-full h-full bg-black overflow-hidden flex items-center justify-center outline-none"
+      {...handlers}
+      tabIndex={0}
+    >
+      <canvas
+        ref={canvasRef}
+        width={GAME_CONFIG.SCREEN_WIDTH}
+        height={GAME_CONFIG.SCREEN_HEIGHT}
+        className="block bg-slate-900"
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'contain',
+          imageRendering: 'pixelated'
+        }}
+      />
+
+      {/* Job Selection Screen (Overlay) */}
+      {!selectedJob && (
+        <JobSelectionScreen onSelectJob={setSelectedJob} />
+      )}
+
+      {/* Game UI Overlays */}
+      {selectedJob && gameStateRef.current && uiState && (
+        <>
+          <HUD 
+            player={{ 
+              ...gameStateRef.current.player, 
+              hp: uiState.playerHp, 
+              maxHp: uiState.playerMaxHp,
+              mp: uiState.playerMp,
+              maxMp: uiState.playerMaxMp,
+              exp: uiState.playerExp,
+              maxExp: uiState.playerMaxExp,
+              level: uiState.playerLevel
+            }} 
+            floor={uiState.floor}
+            onOpenStatus={() => setShowStatus(true)}
+          />
+          
+          {showStatus && (
+            <StatusMenu 
+              player={gameStateRef.current.player}
+              companions={gameStateRef.current.party || []}
+              onClose={() => setShowStatus(false)}
+            />
+          )}
+        </>
+      )}
+
+      {/* Dialog Overlay */}
+      {uiState?.dialogue && (
+        <div className="absolute inset-x-0 bottom-0 p-4 bg-slate-900/90 border-t-2 border-slate-600 text-white min-h-[150px] animate-slide-up z-50 pointer-events-none">
+          <div className="max-w-4xl mx-auto flex gap-4 pointer-events-auto">
+            <div className="w-16 h-16 bg-slate-700 rounded-full border-2 border-yellow-500 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="font-bold text-yellow-500 mb-1">{uiState.dialogue.name}</h3>
+              <p className="text-lg leading-relaxed">{uiState.dialogue.text}</p>
+              <div className="mt-2 text-sm text-gray-400">Press [Space] or Click to continue</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Auth Overlay */}
+      {!user && <AuthOverlay />}
+
+    </div>
+  );
+};
