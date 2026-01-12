@@ -10,7 +10,7 @@ import { THEME } from '../../assets/theme';
 import { GameState, GameSettings, Difficulty, Item, NPCEntity, CompanionEntity } from './types';
 import { generateWorldMap } from './world/MapGenerator';
 import { createPlayer } from './entities/Player';
-import { createEnemy } from './entities/Enemy';
+import { generateEnemy } from './lib/EnemyGenerator'; // 変更
 import { updateGame } from './engine/GameLoop';
 import { renderGame } from './engine/Renderer';
 
@@ -25,7 +25,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { keys, mouse, handlers } = useGameInput();
 
-  // UI State
+  // ... (UI State, gameState Ref 変更なし) ...
   const [isPaused, setIsPaused] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [shopNPC, setShopNPC] = useState<NPCEntity | null>(null);
@@ -51,7 +51,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
     chests: [],
     droppedItems: [],
     player: createPlayer(),
-    party: [], // 仲間
+    party: [],
     npcs: [],
     enemies: [],
     particles: [],
@@ -69,14 +69,16 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
     gameState.current.chests = world.chests;
     gameState.current.player.x = world.spawnPoint.x;
     gameState.current.player.y = world.spawnPoint.y;
-    gameState.current.player.gold = 100; // 初期所持金
+    gameState.current.player.gold = 100; 
     
     // 敵生成
     const diffConfig = DIFFICULTY_CONFIG[settings.difficulty];
     for (let i = 0; i < 10; i++) {
       const ex = Math.random() * (GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE);
       const ey = Math.random() * (GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE);
-      const e = createEnemy(ex, ey);
+      
+      // レベル1の敵
+      const e = generateEnemy(ex, ey, 1);
       e.maxHp *= diffConfig.hpMult; e.hp = e.maxHp;
       gameState.current.enemies.push(e);
     }
@@ -84,6 +86,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
     if (canvasRef.current) canvasRef.current.focus();
   }, []);
 
+  // ... (以下変更なし、既存のコードを使用) ...
   useEffect(() => {
     gameState.current.settings = settings;
   }, [settings]);
@@ -362,14 +365,12 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
               <h2 className="text-2xl font-bold font-serif">Game Settings</h2>
               <button onClick={() => setShowSettings(false)} className="hover:text-white"><X /></button>
             </div>
-            {/* 設定項目省略（既存コードと同じ） */}
+            {/* 設定項目 */}
             <div className="space-y-6">
-              {/* Volume */}
               <div>
                 <label className="block mb-2 font-bold">Volume</label>
                 <input type="range" min="0" max="1" step="0.1" value={settings.masterVolume} onChange={(e) => setSettings({...settings, masterVolume: parseFloat(e.target.value)})} className="w-full accent-[#d4af37]" />
               </div>
-              {/* Game Speed */}
               <div>
                 <label className="block mb-2 font-bold">Game Speed: {settings.gameSpeed}x</label>
                 <div className="flex gap-2">
@@ -378,7 +379,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user }) => {
                   ))}
                 </div>
               </div>
-              {/* Difficulty */}
               <div>
                 <label className="block mb-2 font-bold">Difficulty</label>
                 <div className="grid grid-cols-2 gap-2">
