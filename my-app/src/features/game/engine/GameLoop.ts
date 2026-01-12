@@ -4,13 +4,10 @@ import { GameState, CompanionEntity } from '../types';
 import { checkCollision, tryMove, checkAttackHit } from './Physics';
 import { generateEnemy } from '../lib/EnemyGenerator';
 import { generateRandomItem, generateBossDrop } from '../lib/ItemGenerator';
-import { generateDungeonMap, generateWorldMap, generateTownMap } from '../world/MapGenerator';
+import { generateDungeonMap, generateWorldChunk, generateTownMap } from '../world/MapGenerator';
 
 const TILE_SIZE = 40;
 
-/**
- * ゲームの状態を1フレーム分更新する関数
- */
 export const updateGame = (
   state: GameState, 
   input: { keys: { [key: string]: boolean }, mouse: any },
@@ -18,11 +15,9 @@ export const updateGame = (
 ) => {
   if (isPaused) return;
 
-  const { player, party, enemies, map, mode, settings, npcs, location } = state;
+  const { player, party, enemies, map, mode, settings, location } = state;
   const now = Date.now();
-
-  // 定数を確実に取得
-  const { VIEWPORT_WIDTH, VIEWPORT_HEIGHT, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } = GAME_CONFIG;
+  const { VIEWPORT_WIDTH, VIEWPORT_HEIGHT, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, WORLD_SIZE_W, WORLD_SIZE_H } = GAME_CONFIG;
 
   const speedMult = settings.gameSpeed;
   const diffConfig = DIFFICULTY_CONFIG[settings.difficulty];
@@ -47,26 +42,79 @@ export const updateGame = (
   player.x = newPos.x;
   player.y = newPos.y;
 
+  // --- ★ マップ端での区画移動 (World Chunk Transition) ---
+  if (location.type === 'world') {
+    let nextWx = location.worldX;
+    let nextWy = location.worldY;
+    let changed = false;
+    let newPx = player.x;
+    let newPy = player.y;
+
+    // 左へ移動
+    if (player.x < 0 && location.worldX > 0) {
+      nextWx--;
+      newPx = (MAP_WIDTH - 2) * TILE_SIZE; // 右端へ
+      changed = true;
+    }
+    // 右へ移動
+    else if (player.x > MAP_WIDTH * TILE_SIZE && location.worldX < WORLD_SIZE_W - 1) {
+      nextWx++;
+      newPx = TILE_SIZE; // 左端へ
+      changed = true;
+    }
+    // 上へ移動
+    else if (player.y < 0 && location.worldY > 0) {
+      nextWy--;
+      newPy = (MAP_HEIGHT - 2) * TILE_SIZE; // 下端へ
+      changed = true;
+    }
+    // 下へ移動
+    else if (player.y > MAP_HEIGHT * TILE_SIZE && location.worldY < WORLD_SIZE_H - 1) {
+      nextWy++;
+      newPy = TILE_SIZE; // 上端へ
+      changed = true;
+    }
+
+    if (changed) {
+      // 新しい区画を生成
+      state.location.worldX = nextWx;
+      state.location.worldY = nextWy;
+      const newChunk = generateWorldChunk(nextWx, nextWy);
+      
+      state.map = newChunk.map;
+      state.chests = newChunk.chests;
+      state.npcs = [];
+      state.enemies = [];
+      state.droppedItems = [];
+      
+      // プレイヤー位置更新
+      player.x = newPx;
+      player.y = newPy;
+      
+      // 仲間も追従
+      party.forEach(c => { c.x = newPx; c.y = newPy; });
+      
+      // 新しい区画の敵をスポーン
+      spawnWorldEnemies(state);
+      return; // 描画更新待ち
+    }
+  }
+
   // --- 2. 攻撃処理 ---
   if (input.mouse.leftDown && mode === 'combat') {
     const weapon = player.equipment.mainHand?.weaponStats || {
-      category: 'Fist',
-      range: 1, width: 0.8, shape: 'line',
-      attackSpeed: 0.5, knockback: 0.5,
-      hitRate: 0.9, critRate: 0.1,
+      category: 'Fist', range: 1, width: 0.8, shape: 'line',
+      attackSpeed: 0.5, knockback: 0.5, hitRate: 0.9, critRate: 0.1,
       slash: 0, blunt: 5, pierce: 0
-    } as any; 
+    } as any;
 
     if (!player.lastAttackTime || now - player.lastAttackTime > weapon.attackSpeed * 1000 / speedMult) {
       player.lastAttackTime = now;
-
       const worldMx = input.mouse.x + state.camera.x;
       const worldMy = input.mouse.y + state.camera.y;
-      
       const angle = Math.atan2(worldMy - (player.y + player.height/2), worldMx - (player.x + player.width/2));
       const rangePx = weapon.range * TILE_SIZE;
       
-      // Effect
       state.particles.push({
         x: player.x + player.width/2 + Math.cos(angle) * rangePx * 0.5, 
         y: player.y + player.height/2 + Math.sin(angle) * rangePx * 0.5, 
@@ -75,39 +123,16 @@ export const updateGame = (
 
       enemies.forEach(enemy => {
         if (enemy.dead) return;
-
-        const hit = checkAttackHit(
-          player, enemy, 
-          weapon.shape, 
-          rangePx, 
-          weapon.shape === 'line' ? weapon.width * TILE_SIZE : weapon.width, 
-          angle
-        );
-
+        const hit = checkAttackHit(player, enemy, weapon.shape, rangePx, weapon.shape === 'line' ? weapon.width * TILE_SIZE : weapon.width, angle);
         if (hit) {
-          if (Math.random() > weapon.hitRate) {
-             state.particles.push({x: enemy.x, y: enemy.y, vx:0, vy:-1, life:0.5, color: 'gray', size: 10});
-             return;
-          }
-
-          const rawDmg = ((weapon.slash || 0) + (weapon.blunt || 0) + (weapon.pierce || 0) + player.attack) * (1 + player.level * 0.1);
+          if (Math.random() > weapon.hitRate) { state.particles.push({x: enemy.x, y: enemy.y, vx:0, vy:-1, life:0.5, color: 'gray', size: 10}); return; }
+          const rawDmg = ((weapon.slash||0) + (weapon.blunt||0) + (weapon.pierce||0) + player.attack) * (1 + player.level * 0.1);
           let damage = Math.max(1, rawDmg - enemy.defense);
-
-          if (Math.random() < weapon.critRate) {
-            damage *= 1.5;
-            state.particles.push({x: enemy.x, y: enemy.y, vx:0, vy:-2, life:0.5, color: 'yellow', size: 15});
-          }
-
+          if (Math.random() < weapon.critRate) { damage *= 1.5; state.particles.push({x: enemy.x, y: enemy.y, vx:0, vy:-2, life:0.5, color: 'yellow', size: 15}); }
           enemy.hp -= damage;
-
-          // Knockback
           const knockDist = weapon.knockback * TILE_SIZE;
-          const kbX = Math.cos(angle) * knockDist;
-          const kbY = Math.sin(angle) * knockDist;
-          const kbPos = tryMove(enemy, kbX, kbY, map);
-          enemy.x = kbPos.x;
-          enemy.y = kbPos.y;
-
+          const kbPos = tryMove(enemy, Math.cos(angle)*knockDist, Math.sin(angle)*knockDist, map);
+          enemy.x = kbPos.x; enemy.y = kbPos.y;
           state.particles.push({x: enemy.x, y: enemy.y, vx:0, vy:0, life:0.3, color: 'red', size: 5});
 
           if (enemy.hp <= 0) {
@@ -136,13 +161,9 @@ export const updateGame = (
   party.forEach((comp, index) => {
     if (comp.dead) return;
     const distToPlayer = Math.sqrt((player.x - comp.x)**2 + (player.y - comp.y)**2);
-    let targetX = player.x;
-    let targetY = player.y;
-    let action = 'follow';
-
+    let targetX = player.x; let targetY = player.y; let action = 'follow';
     if (mode === 'combat' && enemies.length > 0) {
-      let nearestDist = 300;
-      let nearestEnemy = null;
+      let nearestDist = 300; let nearestEnemy = null;
       for (const enemy of enemies) {
         if (enemy.dead) continue;
         const d = Math.sqrt((enemy.x - comp.x)**2 + (enemy.y - comp.y)**2);
@@ -150,42 +171,32 @@ export const updateGame = (
       }
       if (nearestEnemy) { targetX = nearestEnemy.x; targetY = nearestEnemy.y; action = 'attack'; }
     }
-
-    let cdx = 0, cdy = 0;
-    const cSpeed = comp.speed * speedMult;
-
+    let cdx = 0, cdy = 0; const cSpeed = comp.speed * speedMult;
     if (action === 'follow') {
       if (distToPlayer > 80) {
         const angle = Math.atan2(targetY - comp.y, targetX - comp.x);
         const offset = (index + 1) * 0.5;
-        cdx = Math.cos(angle + offset) * cSpeed;
-        cdy = Math.sin(angle + offset) * cSpeed;
+        cdx = Math.cos(angle + offset) * cSpeed; cdy = Math.sin(angle + offset) * cSpeed;
       }
     } else if (action === 'attack') {
         const distToEnemy = Math.sqrt((targetX - comp.x)**2 + (targetY - comp.y)**2);
         if (distToEnemy > 40) {
             const angle = Math.atan2(targetY - comp.y, targetX - comp.x);
-            cdx = Math.cos(angle) * cSpeed;
-            cdy = Math.sin(angle) * cSpeed;
+            cdx = Math.cos(angle) * cSpeed; cdy = Math.sin(angle) * cSpeed;
         } else {
             const enemy = enemies.find(e => Math.abs(e.x - targetX) < 5 && Math.abs(e.y - targetY) < 5);
             if (enemy && (!comp.lastAttackTime || now - comp.lastAttackTime > 1000)) {
                 comp.lastAttackTime = now;
                 enemy.hp -= comp.attack; 
                 state.particles.push({x: enemy.x, y: enemy.y, vx:0, vy:0, life:0.5, color: '#00bfff', size: 5});
-                if (enemy.hp <= 0) { 
-                  enemy.dead = true; 
-                  player.xp += 10;
-                  player.gold += 5;
-                }
+                if (enemy.hp <= 0) { enemy.dead = true; player.xp += 10; player.gold += 5; }
             }
         }
     }
-    const nextC = tryMove(comp, cdx, cdy, map);
-    comp.x = nextC.x; comp.y = nextC.y;
+    const nextC = tryMove(comp, cdx, cdy, map); comp.x = nextC.x; comp.y = nextC.y;
   });
 
-  // --- 4. マップ遷移 ---
+  // --- 4. マップ遷移 (施設) ---
   const tx = Math.floor((player.x + player.width/2) / TILE_SIZE);
   const ty = Math.floor((player.y + player.height/2) / TILE_SIZE);
   
@@ -193,14 +204,14 @@ export const updateGame = (
     const tile = map[ty] ? map[ty][tx] : null;
 
     if (tile && tile.type === 'town_entrance') {
-      state.location = { type: 'town', level: 0, townId: `town_${Date.now()}` };
+      state.location = { ...state.location, type: 'town', level: 0, townId: `town_${Date.now()}` };
       const town = generateTownMap(player.level);
       state.map = town.map; state.npcs = town.npcs; state.chests = []; state.droppedItems = []; state.enemies = [];
       state.player.x = town.spawnPoint.x; state.player.y = town.spawnPoint.y;
       party.forEach(c => { c.x = town.spawnPoint.x; c.y = town.spawnPoint.y; });
     }
     else if (tile && tile.type === 'dungeon_entrance' && tile.meta) {
-      state.location = { type: 'dungeon', level: 1, maxDepth: tile.meta.maxDepth, dungeonId: `dungeon_${Date.now()}` };
+      state.location = { ...state.location, type: 'dungeon', level: 1, maxDepth: tile.meta.maxDepth, dungeonId: `dungeon_${Date.now()}` };
       const dungeon = generateDungeonMap(1, tile.meta.maxDepth);
       state.map = dungeon.map; state.chests = dungeon.chests; state.npcs = []; state.droppedItems = []; state.enemies = [];
       state.player.x = dungeon.spawnPoint.x; state.player.y = dungeon.spawnPoint.y;
@@ -223,9 +234,10 @@ export const updateGame = (
       }
     }
     else if (tile && tile.type === 'portal_out') {
-      if (location.type === 'town') { state.location = { type: 'world', level: 0, mapsSinceLastTown: 0 }; }
-      else { const prev = state.location.mapsSinceLastTown || 0; state.location = { type: 'world', level: 0, mapsSinceLastTown: prev + 1 }; }
-      const world = generateWorldMap(state.location.mapsSinceLastTown);
+      // 戻る場所（ワールドマップ）
+      state.location.type = 'world';
+      state.location.level = 0;
+      const world = generateWorldChunk(state.location.worldX, state.location.worldY);
       state.map = world.map; state.chests = world.chests; state.npcs = []; state.enemies = []; state.droppedItems = [];
       state.player.x = world.spawnPoint.x; state.player.y = world.spawnPoint.y;
       party.forEach(c => { c.x = world.spawnPoint.x; c.y = world.spawnPoint.y; });
@@ -233,7 +245,7 @@ export const updateGame = (
     }
   }
 
-  // --- 5. NPCインタラクション ---
+  // --- 5. NPC ---
   if (location.type === 'town' && input.mouse.leftDown) {
     const mx = input.mouse.x + state.camera.x;
     const my = input.mouse.y + state.camera.y;
@@ -249,28 +261,15 @@ export const updateGame = (
   state.camera.x = Math.max(0, Math.min(state.camera.x, MAP_WIDTH * TILE_SIZE - VIEWPORT_WIDTH));
   state.camera.y = Math.max(0, Math.min(state.camera.y, MAP_HEIGHT * TILE_SIZE - VIEWPORT_HEIGHT));
 
-  // --- 7. 敵AI & 戦闘 ---
+  // --- 7. 敵AI ---
   enemies.forEach(enemy => {
     if (enemy.dead) return;
     const eSpeed = enemy.speed * speedMult;
-    
-    // 簡易速度適用 (ランダム移動)
-    if (Math.random() < 0.02) {
-        enemy.x += (Math.random() - 0.5) * 10;
-        enemy.y += (Math.random() - 0.5) * 10;
-    }
-
-    // プレイヤーに向かう
+    if (Math.random() < 0.02) { enemy.x += (Math.random() - 0.5) * 10; enemy.y += (Math.random() - 0.5) * 10; }
     const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
-    // 遠すぎなければ追尾
     const distToP = Math.sqrt((player.x - enemy.x)**2 + (player.y - enemy.y)**2);
-    if (distToP < 300) {
-      enemy.x += Math.cos(angle) * eSpeed;
-      enemy.y += Math.sin(angle) * eSpeed;
-    }
-
-    const enemyNextPos = tryMove(enemy, 0, 0, map); // 壁判定
-    enemy.x = enemyNextPos.x; enemy.y = enemyNextPos.y;
+    if (distToP < 300) { enemy.x += Math.cos(angle) * eSpeed; enemy.y += Math.sin(angle) * eSpeed; }
+    const enemyNextPos = tryMove(enemy, 0, 0, map); enemy.x = enemyNextPos.x; enemy.y = enemyNextPos.y;
 
     if (checkCollision(player, enemy)) {
       let dmg = enemy.attack * 0.1 * diffConfig.hpMult;
@@ -287,8 +286,8 @@ export const updateGame = (
     });
   });
 
-  // --- 8. アイテム回収・クリーンアップ ---
-  if (input.mouse.leftDown) { // Chests
+  // --- 8. アイテム回収 ---
+  if (input.mouse.leftDown) { 
     const worldMx = input.mouse.x + state.camera.x;
     const worldMy = input.mouse.y + state.camera.y;
     state.chests.forEach(chest => {
@@ -326,20 +325,13 @@ export const updateGame = (
 
 const spawnWorldEnemies = (state: GameState) => {
   const { MAP_WIDTH, MAP_HEIGHT, TILE_SIZE } = GAME_CONFIG;
-  // 試行回数制限を追加
   let ex, ey, attempts = 0;
   do {
     ex = Math.random() * (MAP_WIDTH * TILE_SIZE);
     ey = Math.random() * (MAP_HEIGHT * TILE_SIZE);
     attempts++;
-  } while (
-    (state.map[Math.floor(ey/TILE_SIZE)]?.[Math.floor(ex/TILE_SIZE)]?.solid ?? true) &&
-    attempts < 50
-  );
-
-  if (attempts < 50) {
-    state.enemies.push(generateEnemy(ex, ey, state.player.level));
-  }
+  } while ((state.map[Math.floor(ey/TILE_SIZE)]?.[Math.floor(ex/TILE_SIZE)]?.solid ?? true) && attempts < 50);
+  if (attempts < 50) state.enemies.push(generateEnemy(ex, ey, state.player.level));
 };
 
 const spawnDungeonEnemies = (state: GameState, level: number) => {
@@ -348,18 +340,11 @@ const spawnDungeonEnemies = (state: GameState, level: number) => {
   for(let i=0; i<count; i++) {
      let ex, ey;
      let attempts = 0;
-     // 無限ループ対策: 100回試行してダメなら諦める
      do {
        ex = Math.random() * (MAP_WIDTH * TILE_SIZE);
        ey = Math.random() * (MAP_HEIGHT * TILE_SIZE);
        attempts++;
-     } while(
-       (state.map[Math.floor(ey/TILE_SIZE)]?.[Math.floor(ex/TILE_SIZE)]?.solid ?? true) && 
-       attempts < 100
-     );
-     
-     if (attempts < 100) {
-        state.enemies.push(generateEnemy(ex, ey, state.player.level + level));
-     }
+     } while((state.map[Math.floor(ey/TILE_SIZE)]?.[Math.floor(ex/TILE_SIZE)]?.solid ?? true) && attempts < 100);
+     if (attempts < 100) state.enemies.push(generateEnemy(ex, ey, state.player.level + level));
   }
 };
