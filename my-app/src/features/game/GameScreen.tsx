@@ -16,31 +16,13 @@ import { createPlayer } from './entities/Player';
 
 export const GameScreen: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null); // コンテナサイズ監視用
+  const containerRef = useRef<HTMLDivElement>(null);
   const requestRef = useRef<number>();
   
   const gameStateRef = useRef<GameState | null>(null);
 
-  // 画面サイズ管理
-  const [screenSize, setScreenSize] = useState({ 
-    width: window.innerWidth, 
-    height: window.innerHeight 
-  });
-
-  const [uiState, setUiState] = useState<{
-    playerHp: number;
-    playerMaxHp: number;
-    playerMp: number;
-    playerMaxMp: number;
-    playerExp: number;
-    playerMaxExp: number;
-    playerLevel: number;
-    floor: number;
-    dialogue: { name: string, text: string } | null;
-    isCrafting: boolean;
-    hotbar: (string | null)[];
-  } | null>(null);
-
+  const [screenSize, setScreenSize] = useState({ width: window.innerWidth, height: window.innerHeight });
+  const [uiState, setUiState] = useState<any>(null);
   const [showStatus, setShowStatus] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
@@ -55,23 +37,19 @@ export const GameScreen: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // リサイズハンドラ
   useEffect(() => {
     const handleResize = () => {
       if (containerRef.current) {
         const { clientWidth, clientHeight } = containerRef.current;
         setScreenSize({ width: clientWidth, height: clientHeight });
-        // Canvasの解像度も更新
         if (canvasRef.current) {
           canvasRef.current.width = clientWidth;
           canvasRef.current.height = clientHeight;
         }
       }
     };
-
     window.addEventListener('resize', handleResize);
-    handleResize(); // 初回実行
-
+    handleResize();
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
@@ -81,7 +59,6 @@ export const GameScreen: React.FC = () => {
     const startGeneration = async () => {
       setIsGenerating(true);
       setLoadProgress(10);
-      
       await new Promise(r => setTimeout(r, 50));
       setLoadProgress(30);
 
@@ -95,18 +72,14 @@ export const GameScreen: React.FC = () => {
         const initialTown = generateTownMap(1); 
         const initialPlayer = createPlayer(selectedJob); 
         
-        setLoadProgress(70);
-
         let spawnX = initialTown.spawnPoint.x;
         let spawnY = initialTown.spawnPoint.y;
-        
         if (spawnX < 0 || spawnX > GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE) spawnX = 10 * GAME_CONFIG.TILE_SIZE;
         if (spawnY < 0 || spawnY > GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE) spawnY = 10 * GAME_CONFIG.TILE_SIZE;
 
         initialPlayer.x = spawnX;
         initialPlayer.y = spawnY;
 
-        // 初期カメラ位置 (画面サイズに基づく)
         const currentWidth = canvasRef.current?.width || GAME_CONFIG.SCREEN_WIDTH;
         const currentHeight = canvasRef.current?.height || GAME_CONFIG.SCREEN_HEIGHT;
         const camX = Math.max(0, Math.min(initialPlayer.x - currentWidth / 2, GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE - currentWidth));
@@ -143,9 +116,7 @@ export const GameScreen: React.FC = () => {
         startGameLoop();
       }
     };
-
     startGeneration();
-
     return () => { if (requestRef.current) cancelAnimationFrame(requestRef.current); };
   }, [selectedJob]);
 
@@ -155,19 +126,13 @@ export const GameScreen: React.FC = () => {
         const state = gameStateRef.current;
         const isPaused = state.isPaused || !!state.activeCrafting;
         const inputState = { keys: keys.current, mouse: mouse.current };
-        
-        // 画面サイズ情報の更新をGameLoopに伝えるため、カメラ計算をここで行うか、GameLoopにscreenSizeを渡す
-        // ここではGameLoop内のカメラロジックを上書きするため、レンダリング直前にカメラ位置を修正する
         const currentWidth = canvasRef.current.width;
         const currentHeight = canvasRef.current.height;
         
         updateGame(state, inputState, isPaused);
         
-        // カメラ追従ロジック (GameLoop外で再計算して滑らかに)
         state.camera.x = state.player.x - currentWidth / 2;
         state.camera.y = state.player.y - currentHeight / 2;
-        
-        // マップ端の制限
         state.camera.x = Math.max(0, Math.min(state.camera.x, GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE - currentWidth));
         state.camera.y = Math.max(0, Math.min(state.camera.y, GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE - currentHeight));
 
@@ -231,40 +196,14 @@ export const GameScreen: React.FC = () => {
   }, [selectedJob]);
 
   return (
-    // containerRefを追加してサイズを監視
-    <div 
-      ref={containerRef}
-      className="relative w-full h-full bg-black overflow-hidden flex items-center justify-center outline-none" 
-      {...handlers} 
-      tabIndex={0}
-    >
-      <canvas 
-        ref={canvasRef} 
-        // 初期値として設定するが、useEffectで即座に上書きされる
-        width={GAME_CONFIG.SCREEN_WIDTH} 
-        height={GAME_CONFIG.SCREEN_HEIGHT} 
-        className="block bg-slate-900" 
-        style={{ 
-          width: '100%', 
-          height: '100%', 
-          objectFit: 'contain', 
-          imageRendering: 'pixelated' 
-        }} 
-      />
+    <div ref={containerRef} className="relative w-full h-full bg-black overflow-hidden flex items-center justify-center outline-none" {...handlers} tabIndex={0}>
+      <canvas ref={canvasRef} width={GAME_CONFIG.SCREEN_WIDTH} height={GAME_CONFIG.SCREEN_HEIGHT} className="block bg-slate-900" style={{ width: '100%', height: '100%', objectFit: 'contain', imageRendering: 'pixelated' }} />
 
-      {/* Loading Screen */}
       {isGenerating && (
         <div className="absolute inset-0 bg-black/90 z-50 flex flex-col items-center justify-center text-white">
           <div className="text-3xl font-bold mb-6 animate-pulse text-yellow-500">Generating World...</div>
-          <div className="w-96 h-6 bg-gray-800 rounded-full overflow-hidden border-2 border-gray-600 shadow-lg relative">
-            <div 
-              className="h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-300 ease-out" 
-              style={{ width: `${loadProgress}%` }} 
-            />
-            <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent" />
-          </div>
+          <div className="w-96 h-6 bg-gray-800 rounded-full overflow-hidden border-2 border-gray-600 shadow-lg relative"><div className="h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-300 ease-out" style={{ width: `${loadProgress}%` }} /><div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent" /></div>
           <div className="mt-4 font-mono text-xl text-gray-300 tracking-wider">{loadProgress}%</div>
-          <div className="mt-8 text-sm text-gray-500 animate-bounce"> preparing chunks... </div>
         </div>
       )}
 
@@ -272,15 +211,9 @@ export const GameScreen: React.FC = () => {
 
       {selectedJob && !isGenerating && gameStateRef.current && uiState && (
         <>
-          <HUD 
-            player={{ ...gameStateRef.current.player, hp: uiState.playerHp, maxHp: uiState.playerMaxHp, mp: uiState.playerMp, maxMp: uiState.playerMaxMp, exp: uiState.playerExp, nextLevelXp: uiState.playerMaxExp, level: uiState.playerLevel, hotbar: uiState.hotbar }} 
-            floor={uiState.floor}
-            onOpenStatus={() => setShowStatus(true)}
-          />
+          <HUD player={{ ...gameStateRef.current.player, hp: uiState.playerHp, maxHp: uiState.playerMaxHp, mp: uiState.playerMp, maxMp: uiState.playerMaxMp, exp: uiState.playerExp, nextLevelXp: uiState.playerMaxExp, level: uiState.playerLevel, hotbar: uiState.hotbar }} floor={uiState.floor} onOpenStatus={() => setShowStatus(true)} />
           {showStatus && <StatusMenu player={gameStateRef.current.player} companions={gameStateRef.current.party || []} onClose={() => setShowStatus(false)} onSetHotbar={handleSetHotbar} />}
-          {uiState.isCrafting && gameStateRef.current.activeCrafting && (
-            <CraftingMenu player={gameStateRef.current.player} recipes={gameStateRef.current.activeCrafting.craftingRecipes || []} onClose={() => gameStateRef.current!.activeCrafting = null} onCraft={handleCraft} />
-          )}
+          {uiState.isCrafting && gameStateRef.current.activeCrafting && <CraftingMenu player={gameStateRef.current.player} recipes={gameStateRef.current.activeCrafting.craftingRecipes || []} onClose={() => gameStateRef.current!.activeCrafting = null} onCraft={handleCraft} />}
         </>
       )}
 
@@ -288,11 +221,7 @@ export const GameScreen: React.FC = () => {
         <div className="absolute inset-x-0 bottom-0 p-4 bg-slate-900/90 border-t-2 border-slate-600 text-white min-h-[150px] animate-slide-up z-50 pointer-events-none">
           <div className="max-w-4xl mx-auto flex gap-4 pointer-events-auto">
             <div className="w-16 h-16 bg-slate-700 rounded-full border-2 border-yellow-500 flex-shrink-0" />
-            <div className="flex-1">
-              <h3 className="font-bold text-yellow-500 mb-1">{uiState.dialogue.name}</h3>
-              <p className="text-lg leading-relaxed">{uiState.dialogue.text}</p>
-              <div className="mt-2 text-sm text-gray-400">Press [Space] or Click to continue</div>
-            </div>
+            <div className="flex-1"><h3 className="font-bold text-yellow-500 mb-1">{uiState.dialogue.name}</h3><p className="text-lg leading-relaxed">{uiState.dialogue.text}</p></div>
           </div>
         </div>
       )}
