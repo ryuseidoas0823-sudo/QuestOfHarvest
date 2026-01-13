@@ -1,34 +1,54 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth, connectAuthEmulator } from 'firebase/auth';
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 
-// Canvas環境と通常のVite環境の両方に対応できるように設定を取得
-const getFirebaseConfig = () => {
-  if (typeof window !== 'undefined' && (window as any).__firebase_config) {
-    return JSON.parse((window as any).__firebase_config);
+// グローバル変数の型定義
+declare global {
+  interface Window {
+    __firebase_config?: string;
+    __app_id?: string;
+    __initial_auth_token?: string;
   }
-  // 環境変数から取得（Vite用）
-  return {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-    appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  };
+}
+
+// 設定の取得（グローバル変数 または Windowオブジェクトから）
+const getFirebaseConfig = () => {
+  try {
+    // 1. グローバル変数としてのチェック (declare constで宣言されている場合)
+    // @ts-ignore
+    if (typeof __firebase_config !== 'undefined') {
+      // @ts-ignore
+      return JSON.parse(__firebase_config);
+    }
+    // 2. Windowオブジェクトからのチェック
+    if (typeof window !== 'undefined' && window.__firebase_config) {
+      return JSON.parse(window.__firebase_config);
+    }
+  } catch (e) {
+    console.error("Config parse error", e);
+  }
+  return null;
 };
 
-const firebaseConfig = getFirebaseConfig();
-const app = initializeApp(firebaseConfig);
+const config = getFirebaseConfig();
+const isOffline = !config; // 設定がない場合はオフラインモード
 
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+// ダミー設定（オフラインモード用、クラッシュ防止）
+const appConfig = config || { 
+  apiKey: "dummy-api-key", 
+  authDomain: "dummy.firebaseapp.com", 
+  projectId: "dummy-project" 
+};
 
-// 必要に応じてエミュレータ接続設定をここに追加
-// if (import.meta.env.DEV) {
-//   connectAuthEmulator(auth, "http://localhost:9099");
-//   connectFirestoreEmulator(db, 'localhost', 8080);
-// }
+// アプリの初期化（シングルトンパターン）
+const app = getApps().length === 0 ? initializeApp(appConfig) : getApp();
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-// アプリID（Canvas用グローバル変数またはデフォルト）
-export const APP_ID = (window as any).__app_id || 'quest-of-harvest';
+// その他のグローバル値
+// @ts-ignore
+const appId = (typeof __app_id !== 'undefined' ? __app_id : (typeof window !== 'undefined' && window.__app_id ? window.__app_id : 'default-app-id'));
+// @ts-ignore
+const initialAuthToken = (typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : (typeof window !== 'undefined' && window.__initial_auth_token : undefined));
+
+export { app, auth, db, isOffline, appId, initialAuthToken };
