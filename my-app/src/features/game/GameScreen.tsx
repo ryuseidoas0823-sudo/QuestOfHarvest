@@ -10,15 +10,22 @@ import { JobSelectionScreen } from '../../components/UI/JobSelectionScreen';
 import { CraftingMenu } from '../../components/UI/CraftingMenu';
 import { AuthOverlay } from '../auth/AuthOverlay';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth, isOffline } from '../../config/firebase'; // configからインポート
+import { auth, isOffline } from '../../config/firebase'; 
 import { generateTownMap } from './world/MapGenerator';
 import { createPlayer } from './entities/Player';
 
 export const GameScreen: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null); // コンテナサイズ監視用
   const requestRef = useRef<number>();
   
   const gameStateRef = useRef<GameState | null>(null);
+
+  // 画面サイズ管理
+  const [screenSize, setScreenSize] = useState({ 
+    width: window.innerWidth, 
+    height: window.innerHeight 
+  });
 
   const [uiState, setUiState] = useState<{
     playerHp: number;
@@ -43,11 +50,29 @@ export const GameScreen: React.FC = () => {
   const { keys, mouse, handlers } = useGameInput();
 
   useEffect(() => {
-    // オフラインなら認証監視しない
     if (isOffline) return;
-
     const unsubscribe = onAuthStateChanged(auth, setUser);
     return () => unsubscribe();
+  }, []);
+
+  // リサイズハンドラ
+  useEffect(() => {
+    const handleResize = () => {
+      if (containerRef.current) {
+        const { clientWidth, clientHeight } = containerRef.current;
+        setScreenSize({ width: clientWidth, height: clientHeight });
+        // Canvasの解像度も更新
+        if (canvasRef.current) {
+          canvasRef.current.width = clientWidth;
+          canvasRef.current.height = clientHeight;
+        }
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    handleResize(); // 初回実行
+
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   useEffect(() => {
@@ -81,8 +106,11 @@ export const GameScreen: React.FC = () => {
         initialPlayer.x = spawnX;
         initialPlayer.y = spawnY;
 
-        const camX = Math.max(0, Math.min(initialPlayer.x - GAME_CONFIG.VIEWPORT_WIDTH / 2, GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE - GAME_CONFIG.VIEWPORT_WIDTH));
-        const camY = Math.max(0, Math.min(initialPlayer.y - GAME_CONFIG.VIEWPORT_HEIGHT / 2, GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE - GAME_CONFIG.VIEWPORT_HEIGHT));
+        // 初期カメラ位置 (画面サイズに基づく)
+        const currentWidth = canvasRef.current?.width || GAME_CONFIG.SCREEN_WIDTH;
+        const currentHeight = canvasRef.current?.height || GAME_CONFIG.SCREEN_HEIGHT;
+        const camX = Math.max(0, Math.min(initialPlayer.x - currentWidth / 2, GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE - currentWidth));
+        const camY = Math.max(0, Math.min(initialPlayer.y - currentHeight / 2, GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE - currentHeight));
 
         setLoadProgress(90);
         await new Promise(r => setTimeout(r, 100));
@@ -123,15 +151,28 @@ export const GameScreen: React.FC = () => {
 
   const startGameLoop = () => {
     const loop = (time: number) => {
-      if (gameStateRef.current) {
+      if (gameStateRef.current && canvasRef.current) {
         const state = gameStateRef.current;
         const isPaused = state.isPaused || !!state.activeCrafting;
         const inputState = { keys: keys.current, mouse: mouse.current };
         
+        // 画面サイズ情報の更新をGameLoopに伝えるため、カメラ計算をここで行うか、GameLoopにscreenSizeを渡す
+        // ここではGameLoop内のカメラロジックを上書きするため、レンダリング直前にカメラ位置を修正する
+        const currentWidth = canvasRef.current.width;
+        const currentHeight = canvasRef.current.height;
+        
         updateGame(state, inputState, isPaused);
         
-        const ctx = canvasRef.current?.getContext('2d');
-        if (ctx) renderGame(ctx, state, { mouse: mouse.current });
+        // カメラ追従ロジック (GameLoop外で再計算して滑らかに)
+        state.camera.x = state.player.x - currentWidth / 2;
+        state.camera.y = state.player.y - currentHeight / 2;
+        
+        // マップ端の制限
+        state.camera.x = Math.max(0, Math.min(state.camera.x, GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE - currentWidth));
+        state.camera.y = Math.max(0, Math.min(state.camera.y, GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE - currentHeight));
+
+        const ctx = canvasRef.current.getContext('2d');
+        if (ctx) renderGame(ctx, state, { mouse: mouse.current }, { width: currentWidth, height: currentHeight });
 
         setUiState((prev: any) => {
           const newState = {
@@ -190,8 +231,26 @@ export const GameScreen: React.FC = () => {
   }, [selectedJob]);
 
   return (
-    <div className="relative w-full h-full bg-black overflow-hidden flex items-center justify-center outline-none" {...handlers} tabIndex={0}>
-      <canvas ref={canvasRef} width={GAME_CONFIG.SCREEN_WIDTH} height={GAME_CONFIG.SCREEN_HEIGHT} className="block bg-slate-900" style={{ width: '100%', height: '100%', objectFit: 'contain', imageRendering: 'pixelated' }} />
+    // containerRefを追加してサイズを監視
+    <div 
+      ref={containerRef}
+      className="relative w-full h-full bg-black overflow-hidden flex items-center justify-center outline-none" 
+      {...handlers} 
+      tabIndex={0}
+    >
+      <canvas 
+        ref={canvasRef} 
+        // 初期値として設定するが、useEffectで即座に上書きされる
+        width={GAME_CONFIG.SCREEN_WIDTH} 
+        height={GAME_CONFIG.SCREEN_HEIGHT} 
+        className="block bg-slate-900" 
+        style={{ 
+          width: '100%', 
+          height: '100%', 
+          objectFit: 'contain', 
+          imageRendering: 'pixelated' 
+        }} 
+      />
 
       {/* Loading Screen */}
       {isGenerating && (
