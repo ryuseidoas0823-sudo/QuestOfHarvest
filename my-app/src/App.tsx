@@ -1,10 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
 import { getFirestore, doc, getDoc } from 'firebase/firestore';
 import { GameScreen } from './features/game/GameScreen';
 import { TitleScreen } from './features/title/TitleScreen';
 import { AuthOverlay } from './features/auth/AuthOverlay';
+
+// Global variables provided by the environment
+// We declare them here to avoid TypeScript errors when accessing them directly
+declare const __firebase_config: string | undefined;
+declare const __app_id: string | undefined;
+declare const __initial_auth_token: string | undefined;
 
 declare global {
   interface Window {
@@ -16,20 +22,44 @@ declare global {
 
 const getFirebaseConfig = () => {
   try {
-    const configStr = typeof window !== 'undefined' ? window.__firebase_config : undefined;
-    return configStr ? JSON.parse(configStr) : {};
+    // Try accessing global variable directly first
+    if (typeof __firebase_config !== 'undefined') {
+      return JSON.parse(__firebase_config);
+    }
+    // Fallback to window property
+    if (typeof window !== 'undefined' && window.__firebase_config) {
+      return JSON.parse(window.__firebase_config);
+    }
   } catch (e) {
     console.error("Config parse error", e);
-    return {};
   }
+  return null;
 };
 
-const firebaseConfig = getFirebaseConfig();
-const app = Object.keys(firebaseConfig).length > 0 ? initializeApp(firebaseConfig) : undefined;
-const auth = app ? getAuth(app) : undefined;
-const db = app ? getFirestore(app) : undefined;
-const appId = (typeof window !== 'undefined' && window.__app_id) || 'default-app-id';
-const initialToken = (typeof window !== 'undefined' && window.__initial_auth_token);
+// Initialize Firebase
+const initFirebase = () => {
+  const config = getFirebaseConfig();
+  // Use dummy config if real one is missing to prevent "No Firebase App" crash
+  const usableConfig = config && Object.keys(config).length > 0 
+    ? config 
+    : { apiKey: "dummy", authDomain: "dummy", projectId: "dummy" };
+
+  // Prevent multiple initializations
+  const app = getApps().length === 0 ? initializeApp(usableConfig) : getApp();
+  
+  return {
+    app,
+    auth: getAuth(app),
+    db: getFirestore(app),
+    isDummy: !config
+  };
+};
+
+const { auth, db, isDummy } = initFirebase();
+
+// Safely retrieve other globals
+const appId = typeof __app_id !== 'undefined' ? __app_id : (typeof window !== 'undefined' && window.__app_id ? window.__app_id : 'default-app-id');
+const initialToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : (typeof window !== 'undefined' ? window.__initial_auth_token : undefined);
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -37,8 +67,8 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!auth || !db) {
-      console.warn("Firebase not initialized. Running in offline/demo mode.");
+    if (isDummy) {
+      console.warn("Firebase config missing. Running in offline/demo mode.");
       setIsLoading(false);
       return;
     }
@@ -100,7 +130,7 @@ function App() {
         <GameScreen />
       )}
 
-      {!user && auth && <AuthOverlay />}
+      {!user && !isDummy && <AuthOverlay />}
     </div>
   );
 }
