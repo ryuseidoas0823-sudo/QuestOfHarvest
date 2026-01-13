@@ -10,7 +10,7 @@ const JOBS: { id: Job; name: string; weapon: string; desc: string; icon: string;
     id: 'Swordsman', 
     name: 'Swordsman', 
     weapon: 'Sword', 
-    desc: 'Balanced offense and defense. Easy to handle.', 
+    desc: 'Balanced offense and defense.', 
     icon: '⚔️',
     color: 'from-blue-600 to-blue-400'
   },
@@ -18,7 +18,7 @@ const JOBS: { id: Job; name: string; weapon: string; desc: string; icon: string;
     id: 'Warrior', 
     name: 'Warrior', 
     weapon: 'Axe', 
-    desc: 'High HP and powerful attacks, but slower.', 
+    desc: 'High HP and powerful attacks.', 
     icon: '🪓',
     color: 'from-red-600 to-red-400'
   },
@@ -26,7 +26,7 @@ const JOBS: { id: Job; name: string; weapon: string; desc: string; icon: string;
     id: 'Archer', 
     name: 'Archer', 
     weapon: 'Dagger', 
-    desc: 'Fast and agile. High critical rate.', 
+    desc: 'Fast and agile. High crit rate.', 
     icon: '🗡️',
     color: 'from-green-600 to-green-400'
   },
@@ -34,7 +34,7 @@ const JOBS: { id: Job; name: string; weapon: string; desc: string; icon: string;
     id: 'Monk', 
     name: 'Monk', 
     weapon: 'Fists', 
-    desc: 'Martial artist who fights with bare hands. Very fast.', 
+    desc: 'Martial artist. Very fast.', 
     icon: '👊',
     color: 'from-orange-600 to-orange-400'
   },
@@ -42,7 +42,7 @@ const JOBS: { id: Job; name: string; weapon: string; desc: string; icon: string;
     id: 'Cleric', 
     name: 'Cleric', 
     weapon: 'Hammer', 
-    desc: 'High magic and healing potential. Uses heavy hammers.', 
+    desc: 'High magic and healing potential.', 
     icon: '🔨',
     color: 'from-yellow-600 to-yellow-400'
   }
