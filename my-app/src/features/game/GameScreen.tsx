@@ -9,7 +9,8 @@ import { StatusMenu } from '../../components/UI/StatusMenu';
 import { JobSelectionScreen } from '../../components/UI/JobSelectionScreen'; 
 import { CraftingMenu } from '../../components/UI/CraftingMenu';
 import { AuthOverlay } from '../auth/AuthOverlay';
-import { getAuth, onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import { auth, isOffline } from '../../config/firebase'; // configからインポート
 import { generateTownMap } from './world/MapGenerator';
 import { createPlayer } from './entities/Player';
 
@@ -42,7 +43,9 @@ export const GameScreen: React.FC = () => {
   const { keys, mouse, handlers } = useGameInput();
 
   useEffect(() => {
-    const auth = getAuth();
+    // オフラインなら認証監視しない
+    if (isOffline) return;
+
     const unsubscribe = onAuthStateChanged(auth, setUser);
     return () => unsubscribe();
   }, []);
@@ -62,9 +65,13 @@ export const GameScreen: React.FC = () => {
 
       if (!gameStateRef.current) {
         setLoadProgress(50);
+        await new Promise(r => setTimeout(r, 100));
+
         const initialTown = generateTownMap(1); 
         const initialPlayer = createPlayer(selectedJob); 
         
+        setLoadProgress(70);
+
         let spawnX = initialTown.spawnPoint.x;
         let spawnY = initialTown.spawnPoint.y;
         
@@ -77,7 +84,7 @@ export const GameScreen: React.FC = () => {
         const camX = Math.max(0, Math.min(initialPlayer.x - GAME_CONFIG.VIEWPORT_WIDTH / 2, GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE - GAME_CONFIG.VIEWPORT_WIDTH));
         const camY = Math.max(0, Math.min(initialPlayer.y - GAME_CONFIG.VIEWPORT_HEIGHT / 2, GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE - GAME_CONFIG.VIEWPORT_HEIGHT));
 
-        setLoadProgress(80);
+        setLoadProgress(90);
         await new Promise(r => setTimeout(r, 100));
 
         gameStateRef.current = {
@@ -186,13 +193,19 @@ export const GameScreen: React.FC = () => {
     <div className="relative w-full h-full bg-black overflow-hidden flex items-center justify-center outline-none" {...handlers} tabIndex={0}>
       <canvas ref={canvasRef} width={GAME_CONFIG.SCREEN_WIDTH} height={GAME_CONFIG.SCREEN_HEIGHT} className="block bg-slate-900" style={{ width: '100%', height: '100%', objectFit: 'contain', imageRendering: 'pixelated' }} />
 
+      {/* Loading Screen */}
       {isGenerating && (
-        <div className="absolute inset-0 bg-black z-50 flex flex-col items-center justify-center text-white">
-          <div className="text-2xl font-bold mb-4 animate-pulse">Generating World...</div>
-          <div className="w-64 h-4 bg-gray-800 rounded-full overflow-hidden border border-gray-600">
-            <div className="h-full bg-green-500 transition-all duration-300" style={{ width: `${loadProgress}%` }} />
+        <div className="absolute inset-0 bg-black/90 z-50 flex flex-col items-center justify-center text-white">
+          <div className="text-3xl font-bold mb-6 animate-pulse text-yellow-500">Generating World...</div>
+          <div className="w-96 h-6 bg-gray-800 rounded-full overflow-hidden border-2 border-gray-600 shadow-lg relative">
+            <div 
+              className="h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-300 ease-out" 
+              style={{ width: `${loadProgress}%` }} 
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent" />
           </div>
-          <div className="mt-2 font-mono text-sm">{loadProgress}%</div>
+          <div className="mt-4 font-mono text-xl text-gray-300 tracking-wider">{loadProgress}%</div>
+          <div className="mt-8 text-sm text-gray-500 animate-bounce"> preparing chunks... </div>
         </div>
       )}
 
@@ -225,7 +238,7 @@ export const GameScreen: React.FC = () => {
         </div>
       )}
 
-      {!user && <AuthOverlay />}
+      {!user && !isOffline && <AuthOverlay />}
     </div>
   );
 };
