@@ -6,56 +6,53 @@ import { GameScreen } from './features/game/GameScreen';
 import { TitleScreen } from './features/title/TitleScreen';
 import { AuthOverlay } from './features/auth/AuthOverlay';
 
-// Global variables provided by the environment
 declare global {
   interface Window {
-    __firebase_config: string;
-    __app_id: string;
-    __initial_auth_token: string | undefined;
+    __firebase_config?: string;
+    __app_id?: string;
+    __initial_auth_token?: string;
   }
 }
 
-// Safely access global variables
-const firebaseConfigStr = typeof window !== 'undefined' ? window.__firebase_config : '{}';
-const appId = typeof window !== 'undefined' && window.__app_id ? window.__app_id : 'default-app-id';
-const initialAuthToken = typeof window !== 'undefined' ? window.__initial_auth_token : undefined;
+const getFirebaseConfig = () => {
+  try {
+    const configStr = typeof window !== 'undefined' ? window.__firebase_config : undefined;
+    return configStr ? JSON.parse(configStr) : {};
+  } catch (e) {
+    console.error("Config parse error", e);
+    return {};
+  }
+};
 
-// Firebase Init
-// Ensure config is valid JSON before parsing to avoid crashes
-let firebaseConfig = {};
-try {
-  firebaseConfig = JSON.parse(firebaseConfigStr);
-} catch (e) {
-  console.error("Failed to parse firebase config", e);
-}
-
-// Initialize Firebase only if config is valid (has apiKey)
+const firebaseConfig = getFirebaseConfig();
 const app = Object.keys(firebaseConfig).length > 0 ? initializeApp(firebaseConfig) : undefined;
 const auth = app ? getAuth(app) : undefined;
 const db = app ? getFirestore(app) : undefined;
+const appId = (typeof window !== 'undefined' && window.__app_id) || 'default-app-id';
+const initialToken = (typeof window !== 'undefined' && window.__initial_auth_token);
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [gameState, setGameState] = useState<'title' | 'game'>('title');
   const [isLoading, setIsLoading] = useState(true);
 
-  // Auth & Save Data Check
   useEffect(() => {
     if (!auth || !db) {
-      console.error("Firebase not initialized");
+      console.warn("Firebase not initialized. Running in offline/demo mode.");
       setIsLoading(false);
       return;
     }
 
     const initAuth = async () => {
       try {
-        if (initialAuthToken) {
-          await signInWithCustomToken(auth, initialAuthToken);
+        if (initialToken) {
+          await signInWithCustomToken(auth, initialToken);
         } else {
           await signInAnonymously(auth);
         }
       } catch (error) {
         console.error("Auth Error:", error);
+        setIsLoading(false);
       }
     };
 
@@ -65,7 +62,6 @@ function App() {
       setUser(u);
       if (u) {
         try {
-          // Check for existing save data
           const docRef = doc(db, 'artifacts', appId, 'users', u.uid, 'saveData', 'current');
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
@@ -82,16 +78,20 @@ function App() {
   }, []);
 
   const handleStartGame = () => {
-    console.log("Starting New Game...");
     setGameState('game');
   };
 
   if (isLoading) {
-    return <div className="flex items-center justify-center h-screen bg-black text-white">Loading...</div>;
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-black text-white gap-4">
+        <div className="w-12 h-12 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin"></div>
+        <p className="font-mono animate-pulse">System Initializing...</p>
+      </div>
+    );
   }
 
   return (
-    <div className="w-full h-screen bg-black overflow-hidden font-sans select-none">
+    <div className="w-full h-screen bg-black overflow-hidden font-sans select-none text-white">
       {gameState === 'title' && (
         <TitleScreen onStart={handleStartGame} hasSaveData={false} />
       )}
@@ -100,7 +100,7 @@ function App() {
         <GameScreen />
       )}
 
-      {!user && <AuthOverlay />}
+      {!user && auth && <AuthOverlay />}
     </div>
   );
 }
