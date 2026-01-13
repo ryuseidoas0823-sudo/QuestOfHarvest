@@ -14,7 +14,7 @@ declare global {
 // 設定の取得（グローバル変数 または Windowオブジェクトから）
 const getFirebaseConfig = () => {
   try {
-    // 1. グローバル変数としてのチェック (declare constで宣言されている場合)
+    // 1. グローバル変数としてのチェック
     // @ts-ignore
     if (typeof __firebase_config !== 'undefined') {
       // @ts-ignore
@@ -45,10 +45,25 @@ const app = getApps().length === 0 ? initializeApp(appConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// その他のグローバル値
+// その他のグローバル値の取得ヘルパー
+const getGlobalValue = (key: string, defaultValue?: string): string | undefined => {
+  // @ts-ignore
+  if (typeof window !== 'undefined' && window[key]) return window[key];
+  try {
+    // @ts-ignore
+    const globalVal = eval(key); // 直接参照を試みる（安全な環境前提）
+    if (typeof globalVal !== 'undefined') return globalVal;
+  } catch (e) {
+    // ignore
+  }
+  return defaultValue;
+};
+
+// アプリIDとトークンの取得（安全に書き直しました）
 // @ts-ignore
-const appId = (typeof __app_id !== 'undefined' ? __app_id : (typeof window !== 'undefined' && window.__app_id ? window.__app_id : 'default-app-id'));
+const appId = (typeof __app_id !== 'undefined') ? __app_id : (typeof window !== 'undefined' && window.__app_id ? window.__app_id : 'default-app-id');
+
 // @ts-ignore
-const initialAuthToken = (typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : (typeof window !== 'undefined' && window.__initial_auth_token : undefined));
+const initialAuthToken = (typeof __initial_auth_token !== 'undefined') ? __initial_auth_token : (typeof window !== 'undefined' && window.__initial_auth_token ? window.__initial_auth_token : undefined);
 
 export { app, auth, db, isOffline, appId, initialAuthToken };
