@@ -8,7 +8,6 @@ interface TitleScreenProps {
 export const TitleScreen: React.FC<TitleScreenProps> = ({ onStart, hasSaveData }) => {
   return (
     <div className="flex flex-col items-center justify-center h-full w-full bg-slate-900 text-white relative overflow-hidden">
-      {/* Background Decor */}
       <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-700 via-slate-900 to-black" />
       
       <div className="z-10 text-center">
