@@ -30,13 +30,14 @@ export const GameScreen: React.FC = () => {
     floor: number;
     dialogue: { name: string, text: string } | null;
     isCrafting: boolean;
-    // ホットバー更新用State（Refの変更を検知して再レンダリングさせるため）
     hotbar: (string | null)[];
   } | null>(null);
 
   const [showStatus, setShowStatus] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [loadProgress, setLoadProgress] = useState(0);
 
   const { keys, mouse, handlers } = useGameInput();
 
@@ -48,58 +49,84 @@ export const GameScreen: React.FC = () => {
 
   useEffect(() => {
     if (!selectedJob || !canvasRef.current) return;
-    const ctx = canvasRef.current.getContext('2d');
-    if (!ctx) return;
-
-    if (!gameStateRef.current) {
-      const initialTown = generateTownMap(1); 
-      const initialPlayer = createPlayer(selectedJob); 
+    
+    const startGeneration = async () => {
+      setIsGenerating(true);
+      setLoadProgress(10);
       
-      let spawnX = initialTown.spawnPoint.x;
-      let spawnY = initialTown.spawnPoint.y;
-      
-      if (spawnX < 0 || spawnX > GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE) spawnX = 10 * GAME_CONFIG.TILE_SIZE;
-      if (spawnY < 0 || spawnY > GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE) spawnY = 10 * GAME_CONFIG.TILE_SIZE;
+      await new Promise(r => setTimeout(r, 50));
+      setLoadProgress(30);
 
-      initialPlayer.x = spawnX;
-      initialPlayer.y = spawnY;
+      const ctx = canvasRef.current!.getContext('2d');
+      if (!ctx) return;
 
-      const camX = Math.max(0, Math.min(initialPlayer.x - GAME_CONFIG.VIEWPORT_WIDTH / 2, GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE - GAME_CONFIG.VIEWPORT_WIDTH));
-      const camY = Math.max(0, Math.min(initialPlayer.y - GAME_CONFIG.VIEWPORT_HEIGHT / 2, GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE - GAME_CONFIG.VIEWPORT_HEIGHT));
+      if (!gameStateRef.current) {
+        setLoadProgress(50);
+        const initialTown = generateTownMap(1); 
+        const initialPlayer = createPlayer(selectedJob); 
+        
+        let spawnX = initialTown.spawnPoint.x;
+        let spawnY = initialTown.spawnPoint.y;
+        
+        if (spawnX < 0 || spawnX > GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE) spawnX = 10 * GAME_CONFIG.TILE_SIZE;
+        if (spawnY < 0 || spawnY > GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE) spawnY = 10 * GAME_CONFIG.TILE_SIZE;
 
-      gameStateRef.current = {
-        isPaused: false,
-        gameTime: 0,
-        camera: { x: camX, y: camY },
-        player: initialPlayer,
-        party: [],
-        companions: [],
-        map: initialTown.map, 
-        chests: initialTown.chests,
-        npcs: initialTown.npcs,
-        resources: initialTown.resources || [],
-        enemies: [],
-        droppedItems: [],
-        particles: [],
-        location: { type: 'town', level: 0, worldX: 0, worldY: 0, townId: 'starting_village' },
-        mode: 'combat',
-        settings: { difficulty: 'normal', gameSpeed: 1.0, volume: 0.5, masterVolume: 0.5 },
-        dialogue: null,
-        activeShop: null,
-        activeCrafting: null,
-      };
-    }
+        initialPlayer.x = spawnX;
+        initialPlayer.y = spawnY;
 
+        const camX = Math.max(0, Math.min(initialPlayer.x - GAME_CONFIG.VIEWPORT_WIDTH / 2, GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE - GAME_CONFIG.VIEWPORT_WIDTH));
+        const camY = Math.max(0, Math.min(initialPlayer.y - GAME_CONFIG.VIEWPORT_HEIGHT / 2, GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE - GAME_CONFIG.VIEWPORT_HEIGHT));
+
+        setLoadProgress(80);
+        await new Promise(r => setTimeout(r, 100));
+
+        gameStateRef.current = {
+          isPaused: false,
+          gameTime: 0,
+          camera: { x: camX, y: camY },
+          player: initialPlayer,
+          party: [],
+          companions: [],
+          map: initialTown.map, 
+          chests: initialTown.chests,
+          npcs: initialTown.npcs,
+          resources: initialTown.resources || [],
+          enemies: [],
+          droppedItems: [],
+          particles: [],
+          location: { type: 'town', level: 0, worldX: 0, worldY: 0, townId: 'starting_village' },
+          mode: 'combat',
+          settings: { difficulty: 'normal', gameSpeed: 1.0, volume: 0.5, masterVolume: 0.5 },
+          dialogue: null,
+          activeShop: null,
+          activeCrafting: null,
+        };
+        
+        setLoadProgress(100);
+        await new Promise(r => setTimeout(r, 200));
+        setIsGenerating(false);
+        startGameLoop();
+      }
+    };
+
+    startGeneration();
+
+    return () => { if (requestRef.current) cancelAnimationFrame(requestRef.current); };
+  }, [selectedJob]);
+
+  const startGameLoop = () => {
     const loop = (time: number) => {
       if (gameStateRef.current) {
         const state = gameStateRef.current;
         const isPaused = state.isPaused || !!state.activeCrafting;
-
         const inputState = { keys: keys.current, mouse: mouse.current };
+        
         updateGame(state, inputState, isPaused);
-        renderGame(ctx, state, { mouse: mouse.current });
+        
+        const ctx = canvasRef.current?.getContext('2d');
+        if (ctx) renderGame(ctx, state, { mouse: mouse.current });
 
-        setUiState(prev => {
+        setUiState((prev: any) => {
           const newState = {
             playerHp: state.player.hp,
             playerMaxHp: state.player.maxHp,
@@ -111,43 +138,31 @@ export const GameScreen: React.FC = () => {
             floor: state.location.level,
             dialogue: state.dialogue || null,
             isCrafting: !!state.activeCrafting,
-            hotbar: state.player.hotbar // ホットバー状態も監視
+            hotbar: state.player.hotbar
           };
-          
-          if (!prev || JSON.stringify(prev) !== JSON.stringify(newState)) {
-            return newState;
-          }
+          if (!prev || JSON.stringify(prev) !== JSON.stringify(newState)) return newState;
           return prev;
         });
       }
       requestRef.current = requestAnimationFrame(loop);
     };
-
     requestRef.current = requestAnimationFrame(loop);
-    return () => { if (requestRef.current) cancelAnimationFrame(requestRef.current); };
-  }, [selectedJob]);
+  };
 
   const handleCraft = (recipe: CraftingRecipe) => {
     if (!gameStateRef.current) return;
     const player = gameStateRef.current.player;
-    
     recipe.materials.forEach(mat => {
       let remaining = mat.count;
       player.inventory = player.inventory.filter(item => {
-        if (remaining > 0 && item.materialType === mat.materialType) {
-          remaining--;
-          return false; 
-        }
+        if (remaining > 0 && item.materialType === mat.materialType) { remaining--; return false; }
         return true;
       });
     });
-    
     player.gold -= recipe.cost;
-    const newItem = { ...recipe.result, instanceId: crypto.randomUUID() };
-    player.inventory.push(newItem);
+    player.inventory.push({ ...recipe.result, instanceId: crypto.randomUUID() });
   };
 
-  // ホットバー設定処理
   const handleSetHotbar = (slotIndex: number, skillId: string | null) => {
     if (gameStateRef.current) {
       const newHotbar = [...gameStateRef.current.player.hotbar];
@@ -156,18 +171,11 @@ export const GameScreen: React.FC = () => {
     }
   };
 
-  const closeCrafting = () => {
-    if (gameStateRef.current) gameStateRef.current.activeCrafting = null;
-  };
-
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (selectedJob && (e.key === 'Escape' || e.key === 'm' || e.key === 'M')) {
-        if (gameStateRef.current?.activeCrafting) {
-          gameStateRef.current.activeCrafting = null;
-        } else {
-          setShowStatus(prev => !prev);
-        }
+        if (gameStateRef.current?.activeCrafting) gameStateRef.current.activeCrafting = null;
+        else setShowStatus(prev => !prev);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -178,42 +186,28 @@ export const GameScreen: React.FC = () => {
     <div className="relative w-full h-full bg-black overflow-hidden flex items-center justify-center outline-none" {...handlers} tabIndex={0}>
       <canvas ref={canvasRef} width={GAME_CONFIG.SCREEN_WIDTH} height={GAME_CONFIG.SCREEN_HEIGHT} className="block bg-slate-900" style={{ width: '100%', height: '100%', objectFit: 'contain', imageRendering: 'pixelated' }} />
 
-      {!selectedJob && <JobSelectionScreen onSelectJob={setSelectedJob} />}
+      {isGenerating && (
+        <div className="absolute inset-0 bg-black z-50 flex flex-col items-center justify-center text-white">
+          <div className="text-2xl font-bold mb-4 animate-pulse">Generating World...</div>
+          <div className="w-64 h-4 bg-gray-800 rounded-full overflow-hidden border border-gray-600">
+            <div className="h-full bg-green-500 transition-all duration-300" style={{ width: `${loadProgress}%` }} />
+          </div>
+          <div className="mt-2 font-mono text-sm">{loadProgress}%</div>
+        </div>
+      )}
 
-      {selectedJob && gameStateRef.current && uiState && (
+      {!selectedJob && !isGenerating && <JobSelectionScreen onSelectJob={setSelectedJob} />}
+
+      {selectedJob && !isGenerating && gameStateRef.current && uiState && (
         <>
-          {/* HUDにもRefのホットバー状態を反映させるため、uiState経由で渡すか、Refを直接参照するが、再レンダリングが必要なのでuiState.hotbarを使う */}
           <HUD 
-            player={{ 
-              ...gameStateRef.current.player, 
-              hp: uiState.playerHp, 
-              maxHp: uiState.playerMaxHp, 
-              mp: uiState.playerMp, 
-              maxMp: uiState.playerMaxMp, 
-              exp: uiState.playerExp, 
-              nextLevelXp: uiState.playerMaxExp, 
-              level: uiState.playerLevel,
-              hotbar: uiState.hotbar // 反映
-            }} 
+            player={{ ...gameStateRef.current.player, hp: uiState.playerHp, maxHp: uiState.playerMaxHp, mp: uiState.playerMp, maxMp: uiState.playerMaxMp, exp: uiState.playerExp, nextLevelXp: uiState.playerMaxExp, level: uiState.playerLevel, hotbar: uiState.hotbar }} 
             floor={uiState.floor}
             onOpenStatus={() => setShowStatus(true)}
           />
-          {showStatus && (
-            <StatusMenu 
-              player={gameStateRef.current.player} 
-              companions={gameStateRef.current.party || []} 
-              onClose={() => setShowStatus(false)} 
-              onSetHotbar={handleSetHotbar} // ハンドラを渡す
-            />
-          )}
-          
+          {showStatus && <StatusMenu player={gameStateRef.current.player} companions={gameStateRef.current.party || []} onClose={() => setShowStatus(false)} onSetHotbar={handleSetHotbar} />}
           {uiState.isCrafting && gameStateRef.current.activeCrafting && (
-            <CraftingMenu 
-              player={gameStateRef.current.player}
-              recipes={gameStateRef.current.activeCrafting.craftingRecipes || []}
-              onClose={closeCrafting}
-              onCraft={handleCraft}
-            />
+            <CraftingMenu player={gameStateRef.current.player} recipes={gameStateRef.current.activeCrafting.craftingRecipes || []} onClose={() => gameStateRef.current!.activeCrafting = null} onCraft={handleCraft} />
           )}
         </>
       )}
