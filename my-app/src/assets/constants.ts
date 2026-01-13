@@ -1,12 +1,14 @@
 export const GAME_CONFIG = {
-  // 画面サイズ設定 (ズーム調整: TILE_SIZE=32で広範囲を表示)
+  // 基本タイルサイズ
   TILE_SIZE: 32, 
-  SCREEN_WIDTH: 800,
-  SCREEN_HEIGHT: 600,
   
-  // ビューポート
-  VIEWPORT_WIDTH: 800,
-  VIEWPORT_HEIGHT: 600,
+  // 画面サイズ (初期値 - 後で動的に上書きされることを想定)
+  SCREEN_WIDTH: window.innerWidth,
+  SCREEN_HEIGHT: window.innerHeight,
+  
+  // ビューポート (初期値)
+  VIEWPORT_WIDTH: window.innerWidth,
+  VIEWPORT_HEIGHT: window.innerHeight,
 
   // マップ設定
   MAP_WIDTH: 60,
