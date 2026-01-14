@@ -1,58 +1,18 @@
 import { useEffect, useRef } from 'react';
-
-/**
- * キーボードとマウスの入力を管理するカスタムフック
- * Escapeキーによるポーズ検知を追加
- */
 export const useGameInput = () => {
   const keys = useRef<{ [key: string]: boolean }>({});
   const mouse = useRef({ x: 0, y: 0, leftDown: false, rightDown: false });
-
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      keys.current[e.key] = true;
-      keys.current[e.key.toLowerCase()] = true;
-      keys.current[e.key.toUpperCase()] = true;
-    };
-    const handleKeyUp = (e: KeyboardEvent) => {
-      keys.current[e.key] = false;
-      keys.current[e.key.toLowerCase()] = false;
-      keys.current[e.key.toUpperCase()] = false;
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
+    const down = (e: KeyboardEvent) => { keys.current[e.key] = true; };
+    const up = (e: KeyboardEvent) => { keys.current[e.key] = false; };
+    window.addEventListener('keydown', down); window.addEventListener('keyup', up);
+    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
   }, []);
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    mouse.current.x = e.clientX - rect.left;
-    mouse.current.y = e.clientY - rect.top;
+  const handlers = {
+    onMouseMove: (e: React.MouseEvent) => { const r = e.currentTarget.getBoundingClientRect(); mouse.current.x = e.clientX - r.left; mouse.current.y = e.clientY - r.top; },
+    onMouseDown: (e: React.MouseEvent) => { if (e.button === 0) mouse.current.leftDown = true; },
+    onMouseUp: (e: React.MouseEvent) => { if (e.button === 0) mouse.current.leftDown = false; },
+    onContextMenu: (e: React.MouseEvent) => e.preventDefault()
   };
-
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (e.button === 0) mouse.current.leftDown = true;
-    if (e.button === 2) mouse.current.rightDown = true;
-  };
-
-  const handleMouseUp = () => {
-    mouse.current.leftDown = false;
-    mouse.current.rightDown = false;
-  };
-
-  return {
-    keys,
-    mouse,
-    handlers: {
-      onMouseMove: handleMouseMove,
-      onMouseDown: handleMouseDown,
-      onMouseUp: handleMouseUp,
-      onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
-    }
-  };
+  return { keys, mouse, handlers };
 };
