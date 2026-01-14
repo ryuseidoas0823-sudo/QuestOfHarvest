@@ -1,274 +1,70 @@
-// ゲーム全体で使用される型定義
+import { GAME_CONFIG } from '../../../assets/constants';
+import { THEME } from '../../../assets/theme';
+import { PlayerEntity, Job, WeaponStats, InventoryItem, Skill, PlayerSkillState } from '../types';
 
-export type TileType = 
-  | 'grass' | 'dirt' | 'wall' | 'water' | 'crop' 
-  | 'mountain' | 'dungeon_entrance' | 'stairs_down' | 'portal_out'
-  | 'town_entrance' | 'shop_floor' | 'mine_entrance'; // mine_entranceを追加
+export const SKILL_DATABASE: Record<string, Skill> = {
+  'bash': { id: 'bash', name: 'Shield Bash', description: 'Stun enemy', type: 'active', target: 'direction', mpCost: 10, cooldown: 5, icon: '🛡️', unlockLevel: 1, damageMultiplier: 1.2, range: 1.5, jobRequirement: ['Swordsman', 'Warrior'] },
+  'slash': { id: 'slash', name: 'Power Slash', description: 'Strong slash', type: 'active', target: 'direction', mpCost: 15, cooldown: 3, icon: '⚔️', unlockLevel: 2, damageMultiplier: 1.5, range: 2.0, jobRequirement: ['Swordsman'] },
+  'warcry': { id: 'warcry', name: 'War Cry', description: 'Boost ATK', type: 'active', target: 'self', mpCost: 20, cooldown: 15, icon: '📢', unlockLevel: 1, effectDuration: 10, jobRequirement: ['Warrior'] },
+  'heal': { id: 'heal', name: 'Heal', description: 'Recover HP', type: 'active', target: 'self', mpCost: 30, cooldown: 10, icon: '✨', unlockLevel: 1, effectDuration: 0, jobRequirement: ['Cleric', 'Mage'] },
+  'rapid': { id: 'rapid', name: 'Rapid Fire', description: 'Quick shots', type: 'active', target: 'direction', mpCost: 15, cooldown: 6, icon: '🏹', unlockLevel: 1, damageMultiplier: 0.8, range: 5.0, jobRequirement: ['Archer'] },
+  'punch': { id: 'punch', name: 'Iron Fist', description: 'Heavy punch', type: 'active', target: 'direction', mpCost: 10, cooldown: 3, icon: '👊', unlockLevel: 1, damageMultiplier: 2.5, range: 1.0, jobRequirement: ['Monk'] },
+};
 
-export interface Tile {
-  x: number;
-  y: number;
-  type: TileType;
-  solid: boolean;
-  cropGrowth?: number;
-  meta?: any; 
-}
+export const createPlayer = (job: Job = 'Swordsman'): PlayerEntity => {
+  const { TILE_SIZE } = GAME_CONFIG;
+  let baseStats = { hp: 100, mp: 50, attack: 10, defense: 5, speed: GAME_CONFIG.PLAYER_SPEED, magic: 5 };
+  let initialWeaponStats: WeaponStats;
+  let weaponName = 'Unknown';
+  let initialSkills: string[] = [];
 
-// アイテム・装備関連
-export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'unique';
-export type ItemType = 'consumable' | 'weapon' | 'armor' | 'material'; // materialは既存
-export type WeaponCategory = 'Sword' | 'Spear' | 'Axe' | 'Dagger' | 'Hammer' | 'Fist' | 'Pickaxe'; // Pickaxeを追加
-export type AttackShape = 'arc' | 'line';
+  switch (job) {
+    case 'Swordsman': 
+      baseStats = { hp: 110, mp: 40, attack: 12, defense: 8, speed: GAME_CONFIG.PLAYER_SPEED, magic: 5 };
+      weaponName = 'Iron Sword';
+      initialWeaponStats = { category: 'Sword', slash: 10, blunt: 0, pierce: 2, attackSpeed: 0.6, range: 1.5, width: 1.2, shape: 'arc', knockback: 0.8, hitRate: 0.95, critRate: 0.1 };
+      initialSkills = ['bash', 'slash'];
+      break;
+    case 'Warrior': 
+      baseStats = { hp: 140, mp: 20, attack: 15, defense: 6, speed: GAME_CONFIG.PLAYER_SPEED * 0.9, magic: 0 };
+      weaponName = 'Battle Axe';
+      initialWeaponStats = { category: 'Axe', slash: 14, blunt: 4, pierce: 0, attackSpeed: 0.8, range: 1.3, width: 1.5, shape: 'arc', knockback: 1.5, hitRate: 0.85, critRate: 0.15 };
+      initialSkills = ['warcry'];
+      break;
+    case 'Archer': 
+      baseStats = { hp: 90, mp: 60, attack: 9, defense: 4, speed: GAME_CONFIG.PLAYER_SPEED * 1.1, magic: 8 };
+      weaponName = 'Dagger';
+      initialWeaponStats = { category: 'Dagger', slash: 6, blunt: 0, pierce: 6, attackSpeed: 0.35, range: 1.0, width: 0.8, shape: 'line', knockback: 0.2, hitRate: 0.98, critRate: 0.25 };
+      initialSkills = ['rapid'];
+      break;
+    case 'Monk': 
+      baseStats = { hp: 120, mp: 40, attack: 8, defense: 5, speed: GAME_CONFIG.PLAYER_SPEED * 1.05, magic: 10 };
+      weaponName = 'Fists';
+      initialWeaponStats = { category: 'Fist', slash: 0, blunt: 8, pierce: 0, attackSpeed: 0.3, range: 0.8, width: 0.8, shape: 'line', knockback: 0.5, hitRate: 1.0, critRate: 0.15 };
+      initialSkills = ['punch'];
+      break;
+    case 'Cleric': 
+      baseStats = { hp: 90, mp: 100, attack: 10, defense: 6, speed: GAME_CONFIG.PLAYER_SPEED * 0.95, magic: 15 };
+      weaponName = 'Cleric Hammer';
+      initialWeaponStats = { category: 'Hammer', slash: 0, blunt: 12, pierce: 0, attackSpeed: 0.9, range: 1.2, width: 1.2, shape: 'arc', knockback: 2.0, hitRate: 0.9, critRate: 0.05 };
+      initialSkills = ['heal'];
+      break;
+    default: 
+      initialWeaponStats = { category: 'Sword', slash: 10, blunt: 0, pierce: 0, attackSpeed: 0.6, range: 1.5, width: 1.0, shape: 'arc', knockback: 0.5, hitRate: 0.9, critRate: 0.1 };
+      break;
+  }
 
-export interface WeaponStats {
-  category: WeaponCategory;
-  slash: number;
-  blunt: number;
-  pierce: number;
-  attackSpeed: number;
-  range: number;
-  width: number;
-  shape: AttackShape;
-  knockback: number;
-  hitRate: number;
-  critRate: number;
-  isDualWield?: boolean;
-  miningPower?: number; // 採掘力
-}
+  const initialWeapon: InventoryItem = { id: 'initial_weapon', instanceId: crypto.randomUUID(), name: weaponName, type: 'weapon', rarity: 'common', level: 1, value: 10, icon: '⚔️', weaponStats: initialWeaponStats };
+  const skills: PlayerSkillState[] = initialSkills.map(id => ({ skillId: id, lastUsed: 0, level: 1 }));
+  const hotbar = [initialSkills[0] || null, initialSkills[1] || null, null, null, null];
 
-export type EnchantType = 'stat_boost' | 'speed_up' | 'magic_add' | 'extra_dmg' | 'range_up' | 'crit_rate' | 'crit_dmg' | 'hit_rate' | 'evade' | 'drop_rate';
-
-export interface Enchantment {
-  type: EnchantType;
-  value: number;
-  tier: 'weak' | 'medium' | 'strong';
-  description: string;
-}
-
-export type SpecialEffectType = 'party_atk' | 'party_def' | 'party_speed' | 'levitate' | 'magic_resist' | 'move_speed';
-
-export interface SpecialEffect {
-  type: SpecialEffectType;
-  value: number;
-  description: string;
-}
-
-export interface Item {
-  id: string;
-  name: string;
-  type: ItemType;
-  rarity: Rarity;
-  level: number;
-  value: number;
-  icon?: string;
-  weaponStats?: WeaponStats;
-  enchantments?: Enchantment[];
-  specialEffect?: SpecialEffect;
-  stats?: { defense?: number; hp?: number; mp?: number; };
-  isBossDrop?: boolean;
-  description?: string; // 説明文追加
-  materialType?: string; // 素材の種類識別用
-}
-
-export interface InventoryItem extends Item {
-  instanceId: string;
-}
-
-export interface CraftingRecipe {
-  id: string;
-  name: string;
-  result: Item;
-  materials: { materialType: string; count: number }[];
-  cost: number;
-  category: 'weapon' | 'armor' | 'consumable';
-  description: string;
-}
-
-// ワールドオブジェクト
-export interface Chest {
-  id: string;
-  x: number;
-  y: number;
-  opened: boolean;
-  contents: Item[];
-}
-
-export interface DroppedItem {
-  id: string;
-  item: Item;
-  x: number;
-  y: number;
-  life: number;
-}
-
-// 資源オブジェクト（木、岩など）
-export type ResourceType = 'tree' | 'rock' | 'iron_ore' | 'gold_ore';
-
-export interface ResourceNode extends Entity {
-  type: 'resource';
-  resourceType: ResourceType;
-  hp: number;
-  maxHp: number;
-  tier: number; // 硬さ
-}
-
-// スキル定義
-export type SkillType = 'active' | 'passive';
-export type SkillTarget = 'self' | 'enemy' | 'area' | 'direction';
-
-export interface Skill {
-  id: string;
-  name: string;
-  description: string;
-  type: SkillType;
-  target: SkillTarget;
-  mpCost: number;
-  cooldown: number; // 秒
-  icon: string;
-  unlockLevel: number;
-  damageMultiplier?: number;
-  range?: number;
-  effectDuration?: number;
-  jobRequirement?: Job[];
-}
-
-export interface PlayerSkillState {
-  skillId: string;
-  lastUsed: number; // timestamp
-  level: number;
-}
-
-// エンティティ
-export type EntityType = 'player' | 'enemy' | 'item' | 'boss' | 'npc' | 'companion' | 'resource';
-
-export type Job = 'Swordsman' | 'Warrior' | 'Mage' | 'Archer' | 'Cleric' | 'Monk';
-
-export type EnemyRace = 'Slime' | 'Goblin' | 'Skeleton' | 'Wolf' | 'Orc' | 'Ghost' | 'Golem' | 'Bat' | 'Spider' | 'Dragon';
-export type EnemyRank = 'Normal' | 'Elite' | 'Boss';
-
-export interface Entity {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  color: string;
-  speed: number;
-  type: EntityType;
-  dead: boolean;
-}
-
-export interface CombatEntity extends Entity {
-  hp: number;
-  maxHp: number;
-  mp: number;
-  maxMp: number;
-  level: number;
-  defense: number;
-  attack: number;
-  job?: Job;
-  
-  lastAttackTime?: number;
-  isAttacking?: boolean;
-  attackStartTime?: number;
-  attackDuration?: number;
-  attackDirection?: number;
-}
-
-export interface PlayerEntity extends CombatEntity {
-  type: 'player';
-  job: Job;
-  stamina: number;
-  inventory: InventoryItem[];
-  equipment: { mainHand?: InventoryItem; armor?: InventoryItem; accessory?: InventoryItem; };
-  gold: number;
-  xp: number;
-  nextLevelXp: number;
-  stats: {
-    attack: number;
-    defense: number;
-    speed: number;
-    magic: number;
+  return {
+    id: 'player_1',
+    x: 0, y: 0, width: 24, height: 24, color: THEME.colors.player, job: job,
+    hp: baseStats.hp, maxHp: baseStats.hp, mp: baseStats.mp, maxMp: baseStats.mp, attack: baseStats.attack, defense: baseStats.defense,
+    stats: { attack: baseStats.attack, defense: baseStats.defense, speed: baseStats.speed, magic: baseStats.magic },
+    stamina: 100, xp: 0, nextLevelXp: 100, level: 1, gold: 0, speed: baseStats.speed, type: 'player', dead: false,
+    inventory: [initialWeapon], equipment: { mainHand: initialWeapon, armor: undefined, accessory: undefined },
+    skills, hotbar
   };
-  // 新規追加
-  skills: PlayerSkillState[];
-  hotbar: (string | null)[]; // skillId or itemId set to slots 0-4
-}
-
-export interface CompanionEntity extends CombatEntity {
-  type: 'companion';
-  joinDate: number;
-}
-
-export type NPCRole = 'inn' | 'weapon' | 'item' | 'revive' | 'recruit' | 'villager' | 'blacksmith';
-
-export interface NPCEntity extends Entity {
-  type: 'npc';
-  role: NPCRole;
-  name: string;
-  dialogue: string[];
-  shopInventory?: Item[];
-  recruitList?: CompanionEntity[];
-  craftingRecipes?: CraftingRecipe[]; // クラフトレシピを保持
-}
-
-export interface EnemyEntity extends CombatEntity {
-  type: 'enemy' | 'boss';
-  race: EnemyRace;
-  variant: string;
-  rank: EnemyRank;
-  targetId?: string | null;
-  dropRate: number;
-  isBoss?: boolean;
-}
-
-export interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  color: string;
-  size: number;
-}
-
-export type Difficulty = 'easy' | 'normal' | 'hard' | 'expert';
-
-export interface GameSettings {
-  masterVolume: number;
-  gameSpeed: number;
-  difficulty: Difficulty;
-}
-
-export interface LocationInfo {
-  type: 'world' | 'dungeon' | 'town' | 'mine'; // mine追加
-  worldX: number;
-  worldY: number;
-  level: number;       
-  maxDepth?: number;   
-  dungeonId?: string;  
-  difficultyMult?: number; 
-  townId?: string;
-  mapsSinceLastTown?: number;
-}
-
-export interface GameState {
-  map: Tile[][];
-  player: PlayerEntity;
-  party: CompanionEntity[];
-  enemies: EnemyEntity[];
-  npcs: NPCEntity[];
-  resources: ResourceNode[]; // 資源リスト追加
-  particles: Particle[];
-  chests: Chest[];
-  droppedItems: DroppedItem[];
-  camera: { x: number; y: number };
-  mode: 'combat' | 'build';
-  settings: GameSettings;
-  location: LocationInfo; 
-  activeShop?: NPCEntity | null;
-  activeCrafting?: NPCEntity | null; // クラフト中のNPC
-  dialogue?: { name: string, text: string } | null;
-  isPaused: boolean;
-  gameTime: number;
-}
+};
