@@ -2,7 +2,11 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-// グローバル変数の型定義
+// グローバル変数の型定義（Cloudflare/Canvas環境用）
+declare const __firebase_config: string | undefined;
+declare const __app_id: string | undefined;
+declare const __initial_auth_token: string | undefined;
+
 declare global {
   interface Window {
     __firebase_config?: string;
@@ -11,59 +15,54 @@ declare global {
   }
 }
 
-// 設定の取得（グローバル変数 または Windowオブジェクトから）
+// 設定の取得ロジックを強化
 const getFirebaseConfig = () => {
   try {
-    // 1. グローバル変数としてのチェック
-    // @ts-ignore
-    if (typeof __firebase_config !== 'undefined') {
-      // @ts-ignore
+    // 1. グローバル変数 __firebase_config のチェック
+    if (typeof __firebase_config !== 'undefined' && __firebase_config) {
       return JSON.parse(__firebase_config);
     }
-    // 2. Windowオブジェクトからのチェック
+    // 2. window.__firebase_config のチェック
     if (typeof window !== 'undefined' && window.__firebase_config) {
       return JSON.parse(window.__firebase_config);
     }
+    // 3. Vite環境変数 (import.meta.env) のチェック
+    if (import.meta.env.VITE_FIREBASE_API_KEY) {
+      return {
+        apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+        authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+        projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+        storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+        messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+        appId: import.meta.env.VITE_FIREBASE_APP_ID,
+      };
+    }
   } catch (e) {
-    console.error("Config parse error", e);
+    console.error("Firebase config parse error:", e);
   }
   return null;
 };
 
+// 設定の取得と状態判定
 const config = getFirebaseConfig();
-const isOffline = !config; // 設定がない場合はオフラインモード
+// 設定が取得できなかった場合はオフラインモードとする
+export const isOffline = !config || !config.apiKey;
 
-// ダミー設定（オフラインモード用、クラッシュ防止）
-const appConfig = config || { 
-  apiKey: "dummy-api-key", 
-  authDomain: "dummy.firebaseapp.com", 
-  projectId: "dummy-project" 
-};
+// アプリの初期化
+// 設定がない場合でも getAuth() 等がクラッシュしないようダミー設定を入れるか、
+// あるいは isOffline フラグでガードする前提で null を許容する。
+// ここではエラー回避のためダミー設定を使用する。
+const activeConfig = config || { apiKey: "dummy", authDomain: "dummy", projectId: "dummy" };
 
-// アプリの初期化（シングルトンパターン）
-const app = getApps().length === 0 ? initializeApp(appConfig) : getApp();
-const auth = getAuth(app);
-const db = getFirestore(app);
+const app = getApps().length === 0 ? initializeApp(activeConfig) : getApp();
 
-// その他のグローバル値の取得ヘルパー
-const getGlobalValue = (key: string, defaultValue?: string): string | undefined => {
-  // @ts-ignore
-  if (typeof window !== 'undefined' && window[key]) return window[key];
-  try {
-    // @ts-ignore
-    const globalVal = eval(key); // 直接参照を試みる（安全な環境前提）
-    if (typeof globalVal !== 'undefined') return globalVal;
-  } catch (e) {
-    // ignore
-  }
-  return defaultValue;
-};
+export const auth = getAuth(app);
+export const db = getFirestore(app);
 
-// アプリIDとトークンの取得（安全に書き直しました）
-// @ts-ignore
-const appId = (typeof __app_id !== 'undefined') ? __app_id : (typeof window !== 'undefined' && window.__app_id ? window.__app_id : 'default-app-id');
+// アプリIDとトークンの取得
+export const APP_ID = (typeof __app_id !== 'undefined' && __app_id)
+  || (typeof window !== 'undefined' && window.__app_id)
+  || 'quest-of-harvest';
 
-// @ts-ignore
-const initialAuthToken = (typeof __initial_auth_token !== 'undefined') ? __initial_auth_token : (typeof window !== 'undefined' && window.__initial_auth_token ? window.__initial_auth_token : undefined);
-
-export { app, auth, db, isOffline, appId, initialAuthToken };
+export const initialAuthToken = (typeof __initial_auth_token !== 'undefined' && __initial_auth_token)
+  || (typeof window !== 'undefined' && window.__initial_auth_token);
