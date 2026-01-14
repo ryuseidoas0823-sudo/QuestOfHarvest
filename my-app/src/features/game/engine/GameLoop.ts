@@ -206,6 +206,45 @@ export const updateGame = (
     }
   }
 
+  // Enemy AI Update (Sight Check added)
+  enemies.forEach(enemy => {
+    if (enemy.dead) return;
+    const eSpeed = enemy.speed * speedMult;
+    
+    // 徘徊移動 (Random Walk)
+    if (Math.random() < 0.02) { 
+        enemy.x += (Math.random() - 0.5) * 10; 
+        enemy.y += (Math.random() - 0.5) * 10; 
+    }
+
+    const distToP = Math.sqrt((player.x - enemy.x)**2 + (player.y - enemy.y)**2);
+    // 視野範囲チェック (タイル数 * タイルサイズ)
+    const sightPx = (enemy.sightRange || 6) * TILE_SIZE;
+
+    // 視野内なら追跡
+    if (distToP < sightPx) { 
+        const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+        enemy.x += Math.cos(angle) * eSpeed; 
+        enemy.y += Math.sin(angle) * eSpeed; 
+    }
+    
+    const enemyNextPos = tryMove(enemy, 0, 0, map); enemy.x = enemyNextPos.x; enemy.y = enemyNextPos.y;
+
+    if (checkCollision(player, enemy)) {
+      let dmg = enemy.attack * 0.1 * diffConfig.hpMult;
+      if (enemy.type === 'boss') dmg *= 1.5;
+      player.hp -= Math.max(1, dmg - player.defense * 0.05);
+      if (Math.random() > 0.9) state.particles.push({x: player.x, y: player.y, vx:0, vy:0, life:1.0, color: THEME.colors.blood, size:3});
+    }
+    party.forEach(comp => {
+        if (!comp.dead && checkCollision(comp, enemy)) {
+            let dmg = enemy.attack * 0.1 * diffConfig.hpMult;
+            comp.hp -= Math.max(1, dmg - comp.defense * 0.05);
+            if (comp.hp <= 0) comp.dead = true;
+        }
+    });
+  });
+
   state.droppedItems = state.droppedItems.filter(drop => {
     const d = Math.sqrt((player.x - drop.x)**2 + (player.y - drop.y)**2);
     if (d < 40) { player.inventory.push({ ...drop.item, instanceId: crypto.randomUUID() }); return false; }
