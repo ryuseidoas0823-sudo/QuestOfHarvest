@@ -1,6 +1,39 @@
 import { GAME_CONFIG } from '../../../assets/constants';
 import { THEME } from '../../../assets/theme';
-import { GameState, Entity, PlayerEntity, EnemyEntity, CompanionEntity, NPCEntity, CombatEntity, WeaponCategory, ResourceNode } from '../types';
+import { GameState, Entity, PlayerEntity, EnemyEntity, CompanionEntity, NPCEntity, CombatEntity, WeaponCategory, ResourceNode, Tile } from '../types';
+
+// 視界の半径（タイル数）
+const VIEW_RADIUS = 12;
+
+/**
+ * 2点間の視線が通るかチェックする (Bresenham's Line Algorithm)
+ */
+const hasLineOfSight = (
+  x0: number, y0: number, 
+  x1: number, y1: number, 
+  map: Tile[][]
+): boolean => {
+  let dx = Math.abs(x1 - x0);
+  let dy = Math.abs(y1 - y0);
+  let sx = (x0 < x1) ? 1 : -1;
+  let sy = (y0 < y1) ? 1 : -1;
+  let err = dx - dy;
+
+  while (true) {
+    if (x0 === x1 && y0 === y1) break;
+    
+    // 現在のタイルが障害物なら視線が遮られる
+    // (ただし、始点はプレイヤー位置なので除外、終点は対象物なので見えてよい)
+    if (map[y0] && map[y0][x0] && map[y0][x0].solid) {
+      return false; 
+    }
+
+    let e2 = 2 * err;
+    if (e2 > -dy) { err -= dy; x0 += sx; }
+    if (e2 < dx) { err += dx; y0 += sy; }
+  }
+  return true;
+};
 
 /**
  * キャラクターを描画するヘルパー関数
@@ -12,8 +45,12 @@ const drawCharacter = (
   y: number,
   w: number,
   h: number,
-  time: number
+  time: number,
+  isVisible: boolean
 ) => {
+  // 視界外なら描画しない（敵やアイテムなど）
+  if (!isVisible && entity.type !== 'player') return;
+
   let drawX = x;
   let drawY = y;
   
@@ -43,11 +80,12 @@ const drawCharacter = (
   ctx.fill();
 
   if (entity.type === 'player') {
-    // Player drawing (simplified)
+    // Player drawing
     ctx.fillStyle = '#5c6bc0'; ctx.fillRect(drawX + w*0.2, drawY + h*0.3, w*0.6, h*0.35); // Body
     ctx.fillStyle = '#ffccbc'; ctx.beginPath(); ctx.arc(centerX, drawY + h*0.2, w*0.25, 0, Math.PI*2); ctx.fill(); // Head
-    
-    // 武器描画
+    ctx.fillStyle = '#ffca28'; ctx.beginPath(); ctx.arc(centerX, drawY + h*0.18, w*0.28, Math.PI, Math.PI * 2); ctx.fill(); // Hair
+    ctx.fillStyle = '#b71c1c'; ctx.beginPath(); ctx.moveTo(drawX+w*0.25, drawY+h*0.35); ctx.lineTo(drawX+w*0.75, drawY+h*0.35); ctx.lineTo(drawX+w*0.85, drawY+h*0.8); ctx.lineTo(drawX+w*0.15, drawY+h*0.8); ctx.fill(); // Cape
+
     const p = entity as PlayerEntity;
     const mainHand = p.equipment?.mainHand;
     const weaponCat = mainHand?.weaponStats?.category || 'Sword';
@@ -56,7 +94,6 @@ const drawCharacter = (
     drawWeapon(ctx, weaponCat, drawX, drawY, w, h, isAttacking, attackDir);
 
   } else if (entity.type === 'enemy' || entity.type === 'boss') {
-    // Enemy drawing
     const e = entity as EnemyEntity;
     ctx.fillStyle = e.color;
     ctx.fillRect(drawX, drawY, w, h);
@@ -67,18 +104,19 @@ const drawCharacter = (
     const npc = entity as NPCEntity;
     ctx.fillStyle = '#8d6e63';
     ctx.fillRect(drawX + w*0.2, drawY + h*0.2, w*0.6, h*0.8);
-    // Role icon
     ctx.fillStyle = 'white'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
     const icon = npc.role === 'blacksmith' ? '⚒️' : npc.role === 'inn' ? '🏨' : '?';
     ctx.fillText(icon, centerX, drawY - 8);
   } else {
-    // Companion etc
     ctx.fillStyle = entity.color;
     ctx.fillRect(drawX, drawY, w, h);
   }
 };
 
-const drawResourceNode = (ctx: CanvasRenderingContext2D, res: ResourceNode, x: number, y: number, w: number, h: number) => {
+const drawResourceNode = (ctx: CanvasRenderingContext2D, res: ResourceNode, x: number, y: number, w: number, h: number, isVisible: boolean) => {
+  // 視界外なら描画しない（あるいは薄くする）
+  if (!isVisible) return;
+
   const centerX = x + w / 2;
   const centerY = y + h / 2;
 
@@ -89,51 +127,27 @@ const drawResourceNode = (ctx: CanvasRenderingContext2D, res: ResourceNode, x: n
   ctx.fill();
 
   if (res.resourceType === 'tree') {
-    // 幹
-    ctx.fillStyle = '#5d4037';
-    ctx.fillRect(centerX - w*0.15, y + h*0.5, w*0.3, h*0.5);
-    // 葉
-    ctx.fillStyle = res.hp < res.maxHp ? '#388e3c' : '#2e7d32'; // ダメージで色変化
-    ctx.beginPath();
-    ctx.arc(centerX, y + h*0.4, w*0.5, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillStyle = '#5d4037'; ctx.fillRect(centerX - w*0.15, y + h*0.5, w*0.3, h*0.5);
+    ctx.fillStyle = res.hp < res.maxHp ? '#388e3c' : '#2e7d32'; 
+    ctx.beginPath(); ctx.arc(centerX, y + h*0.4, w*0.5, 0, Math.PI * 2); ctx.fill();
   } else if (res.resourceType === 'rock') {
-    ctx.fillStyle = '#757575';
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, w*0.4, 0, Math.PI * 2);
-    ctx.fill();
-    // 質感
-    ctx.fillStyle = '#9e9e9e';
-    ctx.beginPath(); ctx.arc(centerX-5, centerY-5, w*0.1, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#757575'; ctx.beginPath(); ctx.arc(centerX, centerY, w*0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#9e9e9e'; ctx.beginPath(); ctx.arc(centerX-5, centerY-5, w*0.1, 0, Math.PI*2); ctx.fill();
   } else if (res.resourceType === 'iron_ore') {
-    ctx.fillStyle = '#5d4037'; // 土台
-    ctx.beginPath(); ctx.arc(centerX, centerY, w*0.4, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#a1887f'; // 鉱石部分
-    ctx.beginPath(); ctx.arc(centerX, centerY, w*0.25, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#5d4037'; ctx.beginPath(); ctx.arc(centerX, centerY, w*0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#a1887f'; ctx.beginPath(); ctx.arc(centerX, centerY, w*0.25, 0, Math.PI*2); ctx.fill();
   } else if (res.resourceType === 'gold_ore') {
-    ctx.fillStyle = '#5d4037';
-    ctx.beginPath(); ctx.arc(centerX, centerY, w*0.4, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#ffd700';
-    ctx.beginPath(); ctx.arc(centerX, centerY, w*0.25, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#5d4037'; ctx.beginPath(); ctx.arc(centerX, centerY, w*0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ffd700'; ctx.beginPath(); ctx.arc(centerX, centerY, w*0.25, 0, Math.PI*2); ctx.fill();
   }
 
-  // HPバー (ダメージを受けている場合のみ)
   if (res.hp < res.maxHp) {
     ctx.fillStyle = 'red'; ctx.fillRect(x, y - 6, w, 4);
     ctx.fillStyle = 'yellow'; ctx.fillRect(x, y - 6, w * (res.hp / res.maxHp), 4);
   }
 };
 
-const drawWeapon = (
-  ctx: CanvasRenderingContext2D,
-  category: WeaponCategory,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  isAttacking?: boolean,
-  angle?: number
-) => {
+const drawWeapon = (ctx: CanvasRenderingContext2D, category: WeaponCategory, x: number, y: number, w: number, h: number, isAttacking?: boolean, angle?: number) => {
   ctx.save();
   const cx = x + w / 2;
   const cy = y + h / 2;
@@ -151,15 +165,8 @@ const drawWeapon = (
   const wy = y + h * 0.3 + offsetY;
 
   if (category === 'Pickaxe') {
-    ctx.fillStyle = '#5d4037'; // Handle
-    ctx.fillRect(wx, wy - 15, 3, 20);
-    ctx.fillStyle = '#78909c'; // Head
-    ctx.beginPath();
-    ctx.moveTo(wx + 1, wy - 12);
-    ctx.lineTo(wx - 8, wy - 8); // curve left
-    ctx.lineTo(wx + 10, wy - 8); // curve right
-    ctx.lineTo(wx + 1, wy - 15); // top point
-    ctx.fill();
+    ctx.fillStyle = '#5d4037'; ctx.fillRect(wx, wy - 15, 3, 20);
+    ctx.fillStyle = '#78909c'; ctx.beginPath(); ctx.moveTo(wx + 1, wy - 12); ctx.lineTo(wx - 8, wy - 8); ctx.lineTo(wx + 10, wy - 8); ctx.lineTo(wx + 1, wy - 15); ctx.fill();
   } else if (category === 'Sword') {
     ctx.fillStyle = '#b0bec5'; ctx.fillRect(wx, wy - 15, 4, 15);
     ctx.fillStyle = '#5d4037'; ctx.fillRect(wx, wy, 4, 6);
@@ -184,94 +191,156 @@ const drawWeapon = (
 export const renderGame = (
   ctx: CanvasRenderingContext2D,
   state: GameState,
-  input: { mouse: any }
+  input: { mouse: any },
+  screenSize?: { width: number; height: number }
 ) => {
   try {
-    const { TILE_SIZE, VIEWPORT_WIDTH, VIEWPORT_HEIGHT, MAP_WIDTH, MAP_HEIGHT } = GAME_CONFIG;
-    const { width, height } = ctx.canvas;
+    const { TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } = GAME_CONFIG;
+    // 実際のキャンバスサイズを使用することで、横長・拡大縮小の問題を解消
+    const width = screenSize ? screenSize.width : ctx.canvas.width;
+    const height = screenSize ? screenSize.height : ctx.canvas.height;
     const time = Date.now();
 
-    ctx.fillStyle = '#111';
+    // 画面クリア
+    ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, width, height);
 
-    if (!state.map || state.map.length === 0) {
-      ctx.fillStyle = '#fff'; ctx.fillText('Now Loading...', width / 2, height / 2); return;
-    }
+    if (!state.map || state.map.length === 0) return;
 
     ctx.save();
+    
+    // カメラ座標
     const camX = Math.floor(state.camera.x);
     const camY = Math.floor(state.camera.y);
     ctx.translate(-camX, -camY);
 
-    // マップ描画
-    const startCol = Math.floor(camX / TILE_SIZE);
-    const endCol = startCol + (width / TILE_SIZE) + 1;
-    const startRow = Math.floor(camY / TILE_SIZE);
-    const endRow = startRow + (height / TILE_SIZE) + 1;
-    const c1 = Math.max(0, startCol); const c2 = Math.min(MAP_WIDTH - 1, endCol);
-    const r1 = Math.max(0, startRow); const r2 = Math.min(MAP_HEIGHT - 1, endRow);
+    // プレイヤーのタイル座標
+    const playerTileX = Math.floor((state.player.x + state.player.width/2) / TILE_SIZE);
+    const playerTileY = Math.floor((state.player.y + state.player.height/2) / TILE_SIZE);
 
+    // 描画範囲の計算（画面サイズに合わせて動的に決定）
+    // バッファとして +2 タイル余分に描画
+    const startCol = Math.floor(camX / TILE_SIZE) - 1;
+    const endCol = startCol + Math.ceil(width / TILE_SIZE) + 2;
+    const startRow = Math.floor(camY / TILE_SIZE) - 1;
+    const endRow = startRow + Math.ceil(height / TILE_SIZE) + 2;
+
+    const c1 = Math.max(0, startCol);
+    const c2 = Math.min(MAP_WIDTH - 1, endCol);
+    const r1 = Math.max(0, startRow);
+    const r2 = Math.min(MAP_HEIGHT - 1, endRow);
+
+    // 1. タイル描画 & 視界計算
     for (let y = r1; y <= r2; y++) {
       for (let x = c1; x <= c2; x++) {
         const tile = state.map[y]?.[x];
         if (!tile) continue;
-        const px = x * TILE_SIZE; const py = y * TILE_SIZE;
-        switch (tile.type) {
-          case 'grass': ctx.fillStyle = THEME.colors.grass; break;
-          case 'dirt': ctx.fillStyle = THEME.colors.dirt; break;
-          case 'wall': ctx.fillStyle = THEME.colors.wall; break;
-          case 'mine_entrance': ctx.fillStyle = '#3e2723'; break;
-          case 'portal_out': ctx.fillStyle = '#e91e63'; break; // ポータルを目立つ色に
-          default: ctx.fillStyle = '#222';
+
+        // 視界チェック
+        const dist = Math.sqrt((x - playerTileX)**2 + (y - playerTileY)**2);
+        const inRange = dist < VIEW_RADIUS;
+        let isVisible = false;
+
+        // 範囲内かつ、視線が通るかチェック
+        if (inRange) {
+          isVisible = hasLineOfSight(playerTileX, playerTileY, x, y, state.map);
         }
-        ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
-        
-        // 特殊タイルのアイコン描画
-        if (tile.type === 'mine_entrance') {
-          ctx.fillStyle = '#fff'; ctx.font = `${TILE_SIZE*0.7}px sans-serif`; ctx.textAlign = 'center';
-          ctx.fillText('⛏️', px + TILE_SIZE/2, py + TILE_SIZE/2 + TILE_SIZE*0.2);
-        } else if (tile.type === 'dungeon_entrance') {
-          ctx.fillStyle = '#fff'; ctx.font = `${TILE_SIZE*0.7}px sans-serif`; ctx.textAlign = 'center';
-          ctx.fillText('💀', px + TILE_SIZE/2, py + TILE_SIZE/2 + TILE_SIZE*0.2);
-        } else if (tile.type === 'town_entrance') {
-          ctx.fillStyle = '#fff'; ctx.font = `${TILE_SIZE*0.7}px sans-serif`; ctx.textAlign = 'center';
-          ctx.fillText('🏠', px + TILE_SIZE/2, py + TILE_SIZE/2 + TILE_SIZE*0.2);
-        } else if (tile.type === 'portal_out') {
-          ctx.fillStyle = '#fff'; ctx.font = `${TILE_SIZE*0.7}px sans-serif`; ctx.textAlign = 'center';
-          ctx.fillText('🚪', px + TILE_SIZE/2, py + TILE_SIZE/2 + TILE_SIZE*0.2);
-        } else if (tile.type === 'stairs_down') {
-          ctx.fillStyle = '#fff'; ctx.font = `${TILE_SIZE*0.7}px sans-serif`; ctx.textAlign = 'center';
-          ctx.fillText('⬇️', px + TILE_SIZE/2, py + TILE_SIZE/2 + TILE_SIZE*0.2);
+
+        // 探索済みフラグなどは今回は省略し、単純に「見えている場所」と「見えていない場所（暗闇）」で区別
+        // 完全に隠す場合は描画スキップでもよいが、地形だけうっすら見せたい場合はアルファ合成
+        // ここでは「見えない場所は黒（Fog）」とする
+
+        const px = x * TILE_SIZE;
+        const py = y * TILE_SIZE;
+
+        if (isVisible) {
+          // 通常描画
+          switch (tile.type) {
+            case 'grass': ctx.fillStyle = THEME.colors.grass; break;
+            case 'dirt': ctx.fillStyle = THEME.colors.dirt; break;
+            case 'wall': ctx.fillStyle = THEME.colors.wall; break;
+            case 'mine_entrance': ctx.fillStyle = '#3e2723'; break;
+            case 'portal_out': ctx.fillStyle = '#e91e63'; break;
+            case 'town_entrance': ctx.fillStyle = '#795548'; break;
+            case 'shop_floor': ctx.fillStyle = '#a1887f'; break;
+            case 'dungeon_entrance': ctx.fillStyle = '#212121'; break;
+            case 'stairs_down': ctx.fillStyle = '#424242'; break;
+            case 'water': ctx.fillStyle = '#2196f3'; break;
+            case 'mountain': ctx.fillStyle = '#5d4037'; break;
+            default: ctx.fillStyle = '#222';
+          }
+          ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+          
+          // グリッド線（薄く）
+          ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+          ctx.strokeRect(px, py, TILE_SIZE, TILE_SIZE);
+
+          // アイコン描画
+          if (tile.type === 'mine_entrance') { ctx.fillStyle = '#fff'; ctx.font = '20px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('⛏️', px+TILE_SIZE/2, py+TILE_SIZE/2+8); }
+          else if (tile.type === 'dungeon_entrance') { ctx.fillStyle = '#fff'; ctx.font = '20px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('💀', px+TILE_SIZE/2, py+TILE_SIZE/2+8); }
+          else if (tile.type === 'town_entrance') { ctx.fillStyle = '#fff'; ctx.font = '20px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('🏠', px+TILE_SIZE/2, py+TILE_SIZE/2+8); }
+          else if (tile.type === 'portal_out') { ctx.fillStyle = '#fff'; ctx.font = '20px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('🚪', px+TILE_SIZE/2, py+TILE_SIZE/2+8); }
+          else if (tile.type === 'stairs_down') { ctx.fillStyle = '#fff'; ctx.font = '20px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('⬇️', px+TILE_SIZE/2, py+TILE_SIZE/2+8); }
+
+        } else {
+          // 視界外（Fog of War）
+          // まったく描画しない（黒背景のまま）か、暗く描画するか
+          // 今回は「未探索エリアのように真っ黒」にする
+          ctx.fillStyle = '#000';
+          ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
         }
       }
     }
 
-    // 資源描画
-    if (state.resources) {
-      state.resources.forEach(res => {
-        if (res.dead) return;
-        drawResourceNode(ctx, res, res.x, res.y, res.width, res.height);
-      });
-    }
+    // --- 2. オブジェクト・キャラクター描画 ---
+    // 描画順序をY座標でソート
+    const allEntities: any[] = [
+      ...(state.chests || []).map(c => ({...c, type: 'chest', z: c.y})),
+      ...(state.droppedItems || []).map(d => ({...d, type: 'drop', z: d.y})),
+      ...(state.resources || []).map(r => ({...r, z: r.y})),
+      ...(state.npcs || []).map(n => ({...n, z: n.y})),
+      ...(state.enemies || []).map(e => ({...e, z: e.y})),
+      ...(state.party || []).map(p => ({...p, z: p.y})),
+      { ...state.player, z: state.player.y }
+    ];
 
-    // オブジェクト、敵、プレイヤー描画
-    if (state.chests) state.chests.forEach(c => { ctx.fillStyle='gold'; ctx.fillRect(c.x+TILE_SIZE*0.2,c.y+TILE_SIZE*0.2,TILE_SIZE*0.6,TILE_SIZE*0.6); });
-    if (state.droppedItems) state.droppedItems.forEach(d => { ctx.fillStyle='cyan'; ctx.fillRect(d.x+TILE_SIZE*0.3,d.y+TILE_SIZE*0.3,TILE_SIZE*0.4,TILE_SIZE*0.4); });
+    allEntities.sort((a, b) => a.z - b.z);
 
-    if (state.npcs) state.npcs.forEach(n => drawCharacter(ctx, n, n.x, n.y, n.width, n.height, time));
-    if (state.enemies) state.enemies.forEach(e => drawCharacter(ctx, e, e.x, e.y, e.width, e.height, time));
-    if (state.party) state.party.forEach(c => drawCharacter(ctx, c, c.x, c.y, c.width, c.height, time));
-    if (state.player) drawCharacter(ctx, state.player, state.player.x, state.player.y, state.player.width, state.player.height, time);
+    allEntities.forEach(e => {
+      // 画面外判定
+      if (e.x < camX - 50 || e.x > camX + width + 50 || e.y < camY - 50 || e.y > camY + height + 50) return;
+
+      // 視界判定
+      const tileX = Math.floor((e.x + (e.width||32)/2) / TILE_SIZE);
+      const tileY = Math.floor((e.y + (e.height||32)/2) / TILE_SIZE);
+      const dist = Math.sqrt((tileX - playerTileX)**2 + (tileY - playerTileY)**2);
+      
+      // プレイヤー自身は常に表示。それ以外は視界内かつLOSが通る場合のみ
+      const isVisible = (e.id === state.player.id) || (dist < VIEW_RADIUS && hasLineOfSight(playerTileX, playerTileY, tileX, tileY, state.map));
+
+      if (!isVisible) return;
+
+      if (e.type === 'chest') {
+        ctx.fillStyle = 'gold'; ctx.fillRect(e.x + 5, e.y + 5, 20, 20);
+      } else if (e.type === 'drop') {
+        ctx.fillStyle = 'cyan'; ctx.fillRect(e.x + 10, e.y + 10, 10, 10);
+      } else if (e.type === 'resource') {
+        drawResourceNode(ctx, e, e.x, e.y, e.width, e.height, isVisible);
+      } else {
+        drawCharacter(ctx, e, e.x, e.y, e.width, e.height, time, isVisible);
+      }
+    });
 
     // パーティクル
     if (state.particles) state.particles.forEach(p => {
+      if (p.x < camX-50 || p.x > camX+width+50 || p.y < camY-50 || p.y > camY+height+50) return;
       ctx.globalAlpha = Math.max(0, p.life); ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
     });
     ctx.globalAlpha = 1.0;
 
-    // マウスカーソル (攻撃範囲)
-    if (state.mode === 'combat' && state.player?.equipment?.mainHand?.weaponStats) {
-      const weapon = state.player.equipment.mainHand.weaponStats;
+    // マウスカーソル
+    const weapon = state.player?.equipment?.mainHand?.weaponStats;
+    if (state.mode === 'combat' && weapon) {
       ctx.strokeStyle = 'rgba(255, 0, 0, 0.3)';
       ctx.lineWidth = 1;
       const px = state.player.x + state.player.width / 2;
@@ -299,8 +368,9 @@ export const renderGame = (
     ctx.fillStyle = '#fff'; ctx.font = '20px serif'; ctx.textAlign = 'right';
     const locName = state.location.type === 'mine' ? `Mine B${state.location.level}` : state.location.type === 'world' ? 'Overworld' : state.location.type === 'dungeon' ? `Dungeon B${state.location.level}` : 'Village';
     ctx.fillText(locName, width - 20, 30);
+    ctx.fillText(`Gold: ${state.player.gold}`, width - 20, 60);
 
-  } catch (error) {
-    console.error(error);
+  } catch (error: any) {
+    console.error("Render Error:", error);
   }
 };
