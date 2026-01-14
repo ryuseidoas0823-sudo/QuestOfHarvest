@@ -1,22 +1,13 @@
 export const GAME_CONFIG = {
-  // 基本タイルサイズ
   TILE_SIZE: 32, 
-  
-  // 画面サイズ (初期値 - 後で動的に上書きされることを想定)
-  SCREEN_WIDTH: window.innerWidth,
-  SCREEN_HEIGHT: window.innerHeight,
-  
-  // ビューポート (初期値)
-  VIEWPORT_WIDTH: window.innerWidth,
-  VIEWPORT_HEIGHT: window.innerHeight,
-
-  // マップ設定
+  SCREEN_WIDTH: 800,
+  SCREEN_HEIGHT: 600,
+  VIEWPORT_WIDTH: 800,
+  VIEWPORT_HEIGHT: 600,
   MAP_WIDTH: 60,
   MAP_HEIGHT: 60,
   WORLD_SIZE_W: 5,
   WORLD_SIZE_H: 5,
-
-  // ゲームプレイ設定
   PLAYER_SPEED: 4, 
   ENEMY_SPAWN_RATE: 0.02,
   DAY_NIGHT_CYCLE: 60000 * 5,
