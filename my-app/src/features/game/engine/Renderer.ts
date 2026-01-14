@@ -246,10 +246,6 @@ export const renderGame = (
           isVisible = hasLineOfSight(playerTileX, playerTileY, x, y, state.map);
         }
 
-        // 探索済みフラグなどは今回は省略し、単純に「見えている場所」と「見えていない場所（暗闇）」で区別
-        // 完全に隠す場合は描画スキップでもよいが、地形だけうっすら見せたい場合はアルファ合成
-        // ここでは「見えない場所は黒（Fog）」とする
-
         const px = x * TILE_SIZE;
         const py = y * TILE_SIZE;
 
@@ -281,6 +277,14 @@ export const renderGame = (
           else if (tile.type === 'town_entrance') { ctx.fillStyle = '#fff'; ctx.font = '20px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('🏠', px+TILE_SIZE/2, py+TILE_SIZE/2+8); }
           else if (tile.type === 'portal_out') { ctx.fillStyle = '#fff'; ctx.font = '20px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('🚪', px+TILE_SIZE/2, py+TILE_SIZE/2+8); }
           else if (tile.type === 'stairs_down') { ctx.fillStyle = '#fff'; ctx.font = '20px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('⬇️', px+TILE_SIZE/2, py+TILE_SIZE/2+8); }
+
+          // --- ライティング効果 (Light Falloff) ---
+          // 距離に応じて黒をオーバーレイし、視界の端を暗くする
+          const darkness = Math.max(0, (dist - (VIEW_RADIUS - 4)) / 4); 
+          if (darkness > 0) {
+            ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(0.8, darkness)})`;
+            ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+          }
 
         } else {
           // 視界外（Fog of War）
@@ -362,8 +366,20 @@ export const renderGame = (
       ctx.stroke();
     }
 
-    ctx.restore();
+    // --- ビネット効果（画面の四隅を暗くする） ---
+    // これによりレトロでダークな雰囲気を強調
+    const gradient = ctx.createRadialGradient(
+      width / 2, height / 2, Math.max(width, height) * 0.3,
+      width / 2, height / 2, Math.max(width, height) * 0.8
+    );
+    gradient.addColorStop(0, 'rgba(0,0,0,0)');
+    gradient.addColorStop(1, 'rgba(0,0,0,0.6)');
     
+    // カメラ移動の影響を受けないようにコンテキストをリセットしてから描画
+    ctx.restore(); 
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+
     // UI Overlay
     ctx.fillStyle = '#fff'; ctx.font = '20px serif'; ctx.textAlign = 'right';
     const locName = state.location.type === 'mine' ? `Mine B${state.location.level}` : state.location.type === 'world' ? 'Overworld' : state.location.type === 'dungeon' ? `Dungeon B${state.location.level}` : 'Village';
